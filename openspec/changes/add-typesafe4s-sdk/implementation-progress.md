@@ -240,3 +240,19 @@ MUST-CONFIRM facts diverged and were corrected**:
   record (`modelsRawBody` field added) — the failing run above lost the body; the corrected suite
   prints it before failing. Core 127/127 + clientZio 84/84 green post-correction.
 - **Pending:** a re-run with a key should show `modelsDecoded=Right(2)`, `understatedEstimates=List()`.
+
+### Parity flake fix — abandoning-stops-further-exchanges (2026-09-19)
+
+The flake first noted in spec-10 Ring 5 ("abandoned in-flight exchanges were not aborted",
+ce row under parallel load) reproduced in CI on `integrationTestsCe3_9_0`. Root cause: the
+test slept a fixed 50 ms then released the parked gates — a released gate lets the parked
+exchange win the race to `gate.get` and settle as *completed*, never aborted. Empirically
+the carriers split THREE ways, not two: ce/zio/ox interrupt the parked wait (abort lands
+while parked — gates must stay closed until `aborted >= 1`); kyo delivers the race-loser's
+cancellation when the suspended exchange RESUMES (gate must open first — waiting for abort
+with gates closed times out); Pekko/Future cannot preempt at all (released exchange
+completes — asserted `aborted == 0`). Fix: deterministic counter polling — wait for
+`aborted >= 1` before opening gates on interrupting rows, open first on kyo/pekko, then
+wait `waitingNow <= 0` (finalizer-run settlement) before asserting. `pekkoRow` renamed to
+`nonPreemptiveRow`; `abortsOnResumeRow` added for kyo. Verified: suite green 3× on
+ce/3.9.0 (the failing cell), 3× kyo/3.9.0, 1× all other cells; `sbt check` + `parityAll` green.

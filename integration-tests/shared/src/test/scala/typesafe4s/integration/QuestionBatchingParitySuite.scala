@@ -86,17 +86,29 @@ final class QuestionBatchingParitySuite extends FunSuite {
     loop(Nil)
   }
 
-  private def countReached(observe: CIO[Int], expected: Int): CIO[Unit] = {
+  private def countReached(observe: CIO[Int], expected: Int): CIO[Unit] =
+    pollUntil(observe, _ >= expected, s"expected >= $expected")
+
+  private def countDroppedTo(observe: CIO[Int], expected: Int): CIO[Unit] =
+    pollUntil(observe, _ <= expected, s"expected <= $expected")
+
+  private def pollUntil(observe: CIO[Int], holds: Int => Boolean, expectation: String): CIO[Unit] = {
     def loop(attemptsLeft: Int): CIO[Unit] =
       observe.flatMap { n =>
-        if (n >= expected) CIO.unit
-        else if (attemptsLeft <= 0) CIO.fail(new AssertionError(s"expected $expected, saw $n"))
+        if (holds(n)) CIO.unit
+        else if (attemptsLeft <= 0) CIO.fail(new AssertionError(s"$expectation, saw $n"))
         else CIO.sleep(1.milli).flatMap(_ => loop(attemptsLeft - 1))
       }
     loop(5000)
   }
 
-  private val pekkoRow: Boolean = BuildInfo.moduleName.endsWith("-pekko")
+  // the declared divergences in how `close` reaches an in-flight exchange:
+  // the Future-backed row cannot preempt at all (released parked exchanges
+  // COMPLETE), and kyo delivers the race-loser's cancellation when the
+  // suspended exchange RESUMES — its gate must open for the abort to land.
+  // ce/zio/ox interrupt the parked wait directly. Named for the semantics.
+  private val nonPreemptiveRow: Boolean  = BuildInfo.moduleName.endsWith("-pekko")
+  private val abortsOnResumeRow: Boolean = BuildInfo.moduleName.endsWith("-kyo")
 
   // --------------------------------------------------------------------------
   // Ring-5 row 1: answers emitted as each batch resolves — the same set,
@@ -223,12 +235,21 @@ final class QuestionBatchingParitySuite extends FunSuite {
         batchRun  <- client.askBatched(state, Right(qs), ConcurrencyBound(2))
         _         <- countReached(transport.waitingNow.get, 2)
         _         <- batchRun.close
+        // ce/zio/ox interrupt the parked wait itself: the abort must land
+        // BEFORE any gate opens, or the released exchange can win the race
+        // to `gate.get` and settle as completed — never aborted. kyo needs
+        // the gate open (its cancellation lands at resume); the Future row
+        // cannot preempt at all — both release first.
+        _         <- if (nonPreemptiveRow || abortsOnResumeRow) CIO.unit else countReached(transport.aborted.get, 1)
         _         <- CIO.foreachDiscard(List(g1, g2, g3))(_.succeed(()).unit)
-        _         <- CIO.sleep(50.millis)
+        // then wait for settlement: `waitingNow` returns to 0 only after
+        // every parked exchange's ensure has run — `aborted`/`completed`
+        // have their final values on every row
+        _         <- countDroppedTo(transport.waitingNow.get, 0)
         begun     <- transport.begun.get
         aborted   <- transport.aborted.get
       } yield {
-        if (pekkoRow) {
+        if (nonPreemptiveRow) {
           // declared divergence: in-flight exchanges cannot be preempted;
           // released gates let them COMPLETE — nothing is recorded aborted
           assertEquals(aborted, 0, "the Future row reported an aborted exchange")
