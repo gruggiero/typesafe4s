@@ -11,6 +11,19 @@ import sbt.VirtualAxis
 val scala38 = "3.8.4" // published floor
 val scala39 = "3.9.0" // additional verification axis
 
+// The publish guard, shared by `commonSettings` and the client matrix's own
+// override. `scalaVersion` alone is NOT enough: `++<version>` overrides a
+// projectmatrix cell's own scalaVersion, and `sbt +publishSigned` (ci-release's
+// default) issues exactly that — under `++3.8.4` every `*3_9_0` shadow cell
+// would report scalaVersion 3.8.4 and become publishable, writing onto its
+// 3.8.4 twin's coordinates. The cell id carries the axis and `++` cannot touch
+// it, so the two conditions together hold under every cross-build command.
+// (`sbt check`'s `checkPublicationContract` evaluates at the default
+// resolution and so cannot observe the `++` case — hence the id term here.)
+lazy val skipNon38Publish = Def.setting(
+  scalaVersion.value != scala38 || thisProject.value.id.endsWith(scala39.replace('.', '_'))
+)
+
 val munitVersion           = "1.3.6"
 val munitScalacheckVersion = "1.3.1"
 
@@ -517,7 +530,7 @@ lazy val client = (projectMatrix in file("typesafe4s-client"))
   .settings(
     // compatLibrary emits an implicit Future anchor row; it is a compile-only baseline, never published.
     // The 3.9.0 cells never publish either — the `_3` suffix collides with the published 3.8.4 cells.
-    publish / skip   := moduleName.value.endsWith("-future") || scalaVersion.value != scala38,
+    publish / skip   := moduleName.value.endsWith("-future") || skipNon38Publish.value,
     // the SDK reports its own version in the User-Agent header; moduleName identifies the backend row
     // ("typesafe4s-client-pekko" etc.) so shared parity suites can assert per-row declared divergence
     buildInfoKeys    := Seq[BuildInfoKey](version, moduleName),
@@ -588,7 +601,7 @@ lazy val commonSettings = Def.settings(
   // publish (both share the `_3` suffix — a second publish would collide
   // on identical coordinates, and the lower build is the widest-compatible)
   crossScalaVersions := Seq(scala38, scala39),
-  publish / skip     := scalaVersion.value != scala38,
+  publish / skip     := skipNon38Publish.value,
   scalacOptions ++= Seq(
     "-deprecation",
     "-no-indent",
