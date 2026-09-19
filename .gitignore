@@ -1,0 +1,37 @@
+# sbt / Scala
+target/
+project/target/
+project/project/
+.bloop/
+.bsp/
+.metals/
+.scala-build/
+
+# scala-cli build output from the OpenSpec concept scanner
+openspec/schemas/*/scanner/.scala-build/
+openspec/schemas/*/scanner/.bsp/
+
+# IDE
+.idea/
+.vscode/
+
+# The user's global ignore hides .github/ — re-include it here or the CI
+# workflow silently never gets committed (Ring-8 F3).
+!.github/
+
+### Ring 4 — Stainless toolchain (verified/) ###
+# Installed by scripts/setup-stainless.sh, ~99 MB of binaries in total: the
+# Stainless compiler plugin (83 MB), the sbt plugin, and the locally built
+# ScalaZ3 jar that enables native Z3. None of it belongs in git.
+verified/stainless/
+verified/project/lib/
+verified/unmanaged/*.jar
+verified/.ring4/
+verified/.stainless-cache/
+verified/target/
+verified/project/target/
+verified/project/project/
+!verified/.jvmopts
+
+### Ring 3 — mutation testing ###
+stryker4s-report/

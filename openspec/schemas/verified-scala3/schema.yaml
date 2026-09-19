@@ -1,0 +1,1058 @@
+name: verified-scala3
+version: 5
+description: >
+  Depth-first verified Scala 3 workflow for functional, type-safe codebases.
+  Each spec is fully implemented and verified through all applicable rings
+  before the next spec begins.
+
+  ADAPTED FOR typesafe4s — an effect-portable SDK library. The stack is NOT
+  the Typelevel service stack this schema was written against: there is no
+  Iron, no Smithy, no otel4s, no http4s, no database and no Stainless module.
+  The library is cross-compiled into one artifact per effect backend (ZIO,
+  Cats Effect, Ox, Kyo, Pekko) from one shared source tree written against
+  the kyo-compat carrier type. Read openspec/config.yaml and
+  openspec/capability-profile.md before generating any code or test.
+
+  ═══ WHAT CHANGED IN v5 (read this if you last used v4) ═══
+
+  v5 ports the high-yield parts of the adk4s v13 workflow WITHOUT its
+  enforcement plumbing (no evidence ledger, no chain-state, no PreToolUse
+  gate.sh). The human checkpoint remains the gate. Four changes:
+
+  1. PROJECT-SCOPED GROUND TRUTH. `openspec/concept-inventory.md` and
+     `openspec/capability-profile.md` are living project files, NOT per-change
+     copies. Per-change copies died with archiving, destroyed the
+     "Introduced By spec:X" provenance, and forced every change to re-scan.
+     Each change now writes a `inventory-check.md` / `capability-check.md`
+     SNAPSHOT REPORT instead. The project files are never archived.
+
+  2. TESTS BEFORE IMPLEMENTATION, IN THE REAL SOURCE GRAPH. v4's "pseudocode"
+     became the TYPED CONTRACT and moved from
+     `openspec/changes/<c>/pseudocode/*.scala` — which sbt never compiled, so
+     its approval gate was backed by nothing — into the owning module's TEST
+     sources, where `sbt <module>/Test/compile` gives genuine type-level
+     evidence. The test oracle is then written from the SPEC, before any
+     implementation exists, and proved falsifiable by an ORACLE POLARITY run.
+
+  3. RING 8 — ADVERSARIAL SPEC-COMPLIANCE REVIEW, in a FRESH CONTEXT. A
+     subagent whose only inputs are the spec, the typed contract, and the
+     diff against the spec's baseline SHA. Mandatory, and positioned BEFORE
+     the expensive rings.
+
+  4. MECHANICAL SPEC LINT. `scanner/spec-lint.sh` runs before design and
+     implementation-order. Specs now carry a `## Proof Obligations` table
+     binding every requirement to an enforcement mechanism.
+
+  ═══ RING NUMBERING — AND THE ONE DEVIATION ═══
+  0 compile · 1 lint · 1.5 architecture · 2 property tests · 3 mutation ·
+  4 formal · 5 BACKEND PARITY · 8 adversarial review.
+
+  RING 5 IS REPURPOSED IN typesafe4s. Upstream it is telemetry, verified
+  against an otel4s-based observability model. This project emits no
+  telemetry and has no such model, so that ring would be dead weight. Its
+  slot — conditional, expensive, run after mutation — is taken by the
+  project's genuine cross-cutting runtime risk: BEHAVIOURAL DIVERGENCE
+  BETWEEN BACKEND ARTIFACTS. One shared source tree compiles into five
+  published artifacts, and nothing but an executed suite proves they agree.
+
+  Rings 3 (stryker4s) and 4 (Stainless) have NO tooling in this repository.
+  They are UNAVAILABLE, not optional. Read openspec/capability-profile.md —
+  declaring a ring this project cannot run is a claim outrunning its
+  evidence, which is exactly what the invariant below forbids.
+
+  ═══ THE INVARIANT — read once, applies to every artifact and step ═══
+  Code is CORRECT iff every requirement is BOUND to an enforcement mechanism,
+  each mechanism is RESOLVED to an artifact that exists, and each artifact is
+  DISCHARGED — observed to run green in THIS session. Obtained, not recalled.
+
+    NEVER LET A CLAIM OUTRUN ITS EVIDENCE.
+    A verdict you did not obtain in this session is not a verdict.
+    "N/A", "passes", "not applicable" and "already handled" are CLAIMS.
+
+  APPLICABILITY IS A FACT read from the repository, never inferred — run the
+  check that reads it. A RECORDED LIMITATION IS RE-ESTABLISHED BEFORE IT IS
+  RELIED UPON: it carries the date and the mechanism that established it, and
+  a later change re-tests it rather than inheriting it.
+
+  (This preamble is stated ONCE, deliberately. Repeating it per artifact adds
+  tokens, not enforcement — the v4→v5 audit found stale CLAIMS in config.yaml
+  and in the driver skill that no amount of exhortation had caught, and that
+  a single `scanner/scan.sh` run caught immediately.)
+
+artifacts:
+  - id: proposal
+    generates: proposal.md
+    description: Intent, scope, verification strategy, and affected capabilities
+    template: proposal.md
+    instruction: |
+      Write a clear proposal for the change. Beyond scope and motivation, you
+      MUST include:
+
+      1. A VERIFICATION STRATEGY section with checkboxes for which rings apply.
+         Ring 0 (compile) and Ring 1 (lint) always apply. Ring 2 (property
+         tests) is MANDATORY for every code-changing spec — it is not
+         optional and not a judgment call. Ring 3 (mutation), Ring 4 (formal)
+         and Ring 5 (telemetry) are conditional; read
+         openspec/capability-profile.md for what is actually AVAILABLE in this
+         project before checking a box. Declaring a ring the project cannot
+         run is a claim outrunning its evidence.
+         Ring 5 applies when the change (a) crosses a boundary where refined
+         types cannot reach — external client, Kafka, Databricks,
+         runtime-interpreted rules — or (b) asserts an ordering between
+         operations. Not merely because an API operation exists.
+
+      2. An EXISTING CONCEPTS section referencing entries already in
+         openspec/concept-inventory.md that this change will reuse. Read the
+         file; do not re-derive it from memory or from a grep.
+
+      3. A NEW CONCEPTS section previewing any new domain types, service
+         methods, error variants, or public API operations this change introduces.
+
+      4. A GATE TIER PREVIEW stating, per anticipated spec, whether it needs
+         two gates (typed contract, then test oracle) or one combined gate.
+         Recommend TWO for specs introducing new domain types or complex
+         business logic; ONE COMBINED for specs that only add methods to
+         existing traits using existing types. implementation-order.md makes
+         the final call.
+    requires: []
+
+  - id: capability-profile
+    generates: capability-check.md
+    description: >
+      Verification report against the PROJECT-scoped capability profile
+      (openspec/capability-profile.md). Creates it if missing, re-verifies and
+      refreshes it otherwise. All later artifacts and the apply phase MUST
+      generate code and tests for the DETECTED stack, never an assumed one.
+    template: capability-check.md
+    instruction: |
+      The capability profile is PROJECT-SCOPED: openspec/capability-profile.md,
+      sibling of openspec/concepts/ and openspec/concept-inventory.md. It
+      describes the project's stack, which is change-independent.
+
+      A. If it does NOT exist: create it from templates/capability-profile.md
+         by INSPECTING build.sbt, project/Versions.scala,
+         project/Dependencies.scala, project/plugins.sbt, .scalafix.conf,
+         stryker4s.conf and the source tree. Never from openspec/config.yaml —
+         config.yaml is prose a human wrote and it drifts.
+      B. If it exists: RE-VERIFY it against the build. A profile that
+         disagrees with build.sbt is stale ground truth. Update in place.
+      C. Write THIS change's capability-check.md recording the verification
+         result, rows corrected, and any NEW capability this change introduces.
+
+      IF THE PROFILE AND openspec/config.yaml DISAGREE, THE PROFILE WINS —
+      and fix config.yaml. This failure mode is not hypothetical: in the
+      project this schema came from, config.yaml claimed a test framework
+      that was not on the classpath and a formal-verification module that did
+      not exist, and both claims had been driving generated code for months.
+
+      typesafe4s is PRE-BUILD: at adoption time there was no build.sbt and no
+      Scala source. Until one exists, the honest profile records the stack as
+      PLANNED and every ring except Ring 0 as unverified. Do not promote
+      config.yaml's plan into the profile's detected column.
+
+      Detect and record at minimum:
+      - Test framework and property library, with their EXACT versions and
+        base classes; the coverage-assertion facility (ScalaCheck
+        classify/collect is INFORMATIONAL — it cannot fail a build, so a
+        conditioned property can pass vacuously) and the seed-fixing
+        mechanism.
+      - Deterministic concurrency test kit (TestControl / TestClock) —
+        PRESENT or ABSENT. If ABSENT, concurrency-touching specs need either
+        a setup task adding it or an explicit human-approved waiver with
+        stated correctness impact. Record the negative case explicitly;
+        spec-lint reads this row.
+      - Cross-backend rows: which backend artifacts the project matrix
+        generates, which are published, and whether one integration suite is
+        compiled into all of them. This is the Ring 5 (parity) capability.
+      - Mutation tooling, and whether its config has a FIXED mutate list — if
+        so, Ring 3 MUST retarget it per spec or the score describes someone
+        else's code.
+      - Formal verification: present only if a Stainless module actually
+        exists in THIS repo. A version claim in config.yaml is not a module.
+        In typesafe4s there is none — record Ring 4 as UNAVAILABLE.
+      - Static analysis: which rules are ACTIVE. An architecture rule that is
+        not in .scalafix.conf does not run, however often the workflow
+        describes it.
+      - EXHAUSTIVENESS ESCALATION: if -Werror is not active, Ring 0 MUST
+        escalate PatternMatchExhaustivity and MatchCaseUnreachable to errors.
+        The schema's no-catch-all rules are unenforceable if an inexhaustive
+        match over a sealed type merely warns. Record the exact mechanism.
+      - The EXACT compile/test/lint commands that genuinely work in this
+        build — including any preparatory command (e.g. `scalafixEnable` when
+        semanticdb is not enabled at ThisBuild level).
+      - TYPED CONTRACT PLACEMENT: where a contract file must live to be part
+        of the real sbt source graph.
+    requires:
+      - proposal
+
+  - id: concept-inventory
+    generates: inventory-check.md
+    description: >
+      Verification report against the PROJECT-scoped concept inventory
+      (openspec/concept-inventory.md — the type-level companion of the
+      behavioral registry at openspec/concepts/). Creates it if missing,
+      verifies and refreshes it otherwise.
+    template: inventory-check.md
+    instruction: |
+      The concept inventory is PROJECT-SCOPED: openspec/concept-inventory.md,
+      NOT in the change directory. It is a LIVING DOCUMENT — per-change copies
+      died with archiving and destroyed the "Introduced By spec:X" provenance
+      the workflow promises.
+
+      A. If it does NOT exist: create it with the SEMANTIC scanner:
+           scanner/scan.sh . --output openspec/concept-inventory.md
+      B. If it exists: VERIFY it against current source; fix stale rows
+         PRESERVING their provenance column. Do NOT re-create it from
+         scratch — a fresh scan overwrites which spec introduced each concept.
+      C. Write THIS change's inventory-check.md recording: the consistency
+         result, rows fixed, the behavioral-registry pass result, and new
+         candidate concepts flagged for human review.
+
+      SCANNER — use scanner/scan.sh (scala-cli + Scalameta). It PARSES with
+      dialects.Scala3 and is MULTI-MODULE, discovering every `src/` root.
+      Regex scanning is not an acceptable substitute: the v4 scanner was a
+      single-root regex edition that reported "0 opaque types, 0 sealed
+      types, 0 case classes" on this repository and exited 0. A scan that
+      finds nothing on a populated repository is a BROKEN SCAN, not an empty
+      project — treat a suspiciously empty result as a tool failure.
+
+      The scanner COUNTS AND REPORTS files that fail to parse. A nonzero
+      parse-failure count is an INCOMPLETE scan, not a clean one: record the
+      failing files in the inventory as a dated known gap, and re-establish
+      that gap in a later change rather than inheriting it.
+
+      CONSISTENCY CHECK — record the result:
+      - every recorded package path matches a real `package` clause
+      - every recorded constraint matches the source expression (the v4
+        hand-written inventory recorded `OfferingCode` as `Not[Empty]` when
+        the source says `OfferingCodeConstraint`, and gave `PastCondition`
+        3 variants when the code has 11 — hand-maintained rows drift)
+      - every recorded generator exists in test sources as recorded
+
+      BEHAVIORAL REGISTRY PASS (openspec/concepts/ exists in this project):
+      1. Run scanner/registry-check.sh — it verifies every Implementation-map
+         symbol against the source tree, every declared fold field against its
+         fold file, every Concept/action cited by active specs, and (this
+         project's local Pass 4) Ring 5 EARS references and open findings in
+         openspec/ring5-findings/. A failing row MUST be fixed as part of the
+         change that moved the code.
+      2. Flag new candidate concepts for human review: a new variant in a
+         persistent entity's command/event enum absent from any action table;
+         a new consumer handler, producer or HTTP middleware absent from any
+         Synchronizations section; a new persisted state component owned by
+         no concept.
+      3. Record the result in the inventory's registry-pass section.
+    requires:
+      - proposal
+      - capability-profile
+
+  - id: specs
+    generates: "specs/**/*.md"
+    description: >
+      Delta specs — one per capability. Requirements, acceptance scenarios,
+      ScalaCheck properties, temporal properties, formal contracts where
+      applicable, and a Proof Obligations table binding every requirement to
+      an enforcement mechanism.
+    template: spec.md
+    instruction: |
+      Create one spec file per capability under `specs/<capability-name>/spec.md`.
+
+      1. NORMATIVE FORM — every requirement opens with a statement containing
+         SHALL or MUST, BEFORE its **Given** clause. `openspec validate
+         --strict` and spec-lint F1 both reject requirements without it.
+      2. Requirements use Given/When/Then. Every **Then** is OBSERVABLE — a
+         return value, persisted event, emitted message, or error value; never
+         an internal intention.
+      3. Every spec MUST include a "Properties (Ring 2)" section with
+         properties expressed as English invariants AND `forAll` pseudocode.
+         Properties describe invariants, not examples. Good: "deposit
+         increases balance by exact amount for all positive amounts". Bad:
+         "depositing 100 into account ABC gives 200."
+      4. GENERATOR STRATEGY — every property declares a **Generator strategy**
+         line (spec-lint F3). Prefer CONSTRUCTIVE generators. This project's
+         property library has no coverage ASSERTION (see the capability
+         profile), so a filtered/conditioned property can pass vacuously with
+         nobody noticing: say how the interesting cases are actually reached.
+      5. "Concepts Introduced (new)" lists ANY new types, enums, traits, or
+         public API operations. These are COMMITMENTS — apply Step 11 machine-
+         diffs the implementation against this table.
+      6. ALTITUDE RULE (openspec/concepts/ exists here, so this APPLIES):
+         requirements and scenarios use behavioral vocabulary only — concept
+         references, user-facing surface language, domain terms, test vectors.
+         Code identifiers — module names, error classes, build commands — go
+         in "## Implementation Anchors", never inside a Given/When/Then.
+         Cite touched concepts in "## Concepts Used (behavioral)" with links.
+         If the spec alters a concept's actions/state/syncs, say that updating
+         the concept file is part of the spec.
+      7. ADVERSARIAL RULE — every requirement containing "only", "never" or
+         "must not" MUST have at least one scenario whose input the
+         requirement FORBIDS. Positive examples alone do not pin a negative
+         requirement (spec-lint F2 checks the structural half).
+      8. MUST-CONFIRM RULE — any classification table, code mapping, or value
+         domain whose authoritative source is outside the repo is marked
+         "MUST-CONFIRM — do not invent", with a pointer to the real source.
+         Never write invented values into a spec.
+      9. PROOF OBLIGATIONS — MANDATORY. Map EVERY requirement, scenario,
+         invariant and introduced type constraint to its enforcement
+         mechanism, using the mandated Source format in the template. Every
+         requirement must be NAMED by at least one obligation; spec-lint
+         checks this as REACHABILITY (F7), not as a row count. A Source that
+         names nothing resolvable fails (F6); a typed source naming a
+         heading that does not exist fails (F8).
+         Mechanisms, strongest first: type system (unrepresentable) → smart
+         constructor → property/scenario test → static rule → formal contract
+         → runtime monitor → adversarial review → manual review (allowed, but
+         must be explicit).
+         STRENGTH RULE: if a requirement claims a state is IMPOSSIBLE, enforce
+         it at the top tiers (type / smart constructor / compile-negative). If
+         no type can express it, write "tier-justified: <why not>".
+      10. COMPILE-NEGATIVE OBLIGATIONS — when the spec says something must not
+          be CONSTRUCTIBLE, list it; each row becomes an
+          `assertDoesNotCompile` test in the oracle.
+      11. TYPE-WIDENING IMPACT — if the spec aliases, widens, or changes the
+          variant set of a PUBLIC type, add a "Type-Widening Impact"
+          subsection. Aliasing to a richer enum silently widens every
+          downstream catch-all match WITH NO FILE EDIT; apply Step 0 scans
+          for this and needs the spec to say it is coming.
+      12. CONCURRENCY RULE — a requirement about concurrent behavior names a
+          DETERMINISTIC observable (ordering, final state, emitted events),
+          never wall-clock timing. "Completes within N ms" is not a
+          requirement, it is a flake.
+      13. ERROR TYPE-FEASIBILITY — a requirement asserting a specific returned
+          error variant must be feasible against the producing API's return
+          type. A **Then** of `Left(DomainError.X)` from a handler typed
+          `Either[String, R]` is unimplementable as written.
+      14. Specs are DELTA specs: `## ADDED Requirements`,
+          `## MODIFIED Requirements`.
+    requires:
+      - proposal
+      - concept-inventory
+
+  - id: spec-lint
+    generates: spec-lint.md
+    description: >
+      Lint report over all specs — ambiguity, testability, concept resolution,
+      generator strategies, proof-obligation completeness. Fails fast if any
+      spec is too ambiguous to implement safely.
+    template: spec-lint.md
+    instruction: |
+      STEP 0 — MECHANICAL PRE-PASS, before any judgment:
+      1. Run `openspec validate --strict` for the change — it must pass.
+      2. Run `scanner/spec-lint.sh <change-dir>`. It enforces the greppable
+         subset mechanically and reports vague-word candidates. Its FAILs are
+         lint FAILs. Paste its summary into the report.
+           F1 SHALL/MUST before the first **Given**
+           F2 negative requirement with no scenario
+           F3 property with no **Generator strategy** line
+           F4 requirements but no ## Proof Obligations section
+           F5 temporal property missing trigger/response
+           F6 obligation Source naming nothing resolvable
+           F7 a requirement NO obligation names — unenforced (reachability;
+              this supersedes row-counting)
+           F8 a typed source naming a Property/Scenario heading that does not
+              exist — a typo that resolved to nothing
+           F10 registry exists but a spec with requirements has no
+              "## Concepts Used (behavioral)" section
+           W7 code-identifier candidates inside a Given/When/Then
+         F9 is NOT run here — it is post-implementation; see apply Step 11.
+      3. READ THE SCRIPT'S "CONTEXT" BLOCK AND COPY IT INTO THE REPORT.
+
+      APPLICABILITY IS NOT A JUDGMENT CALL. A conditional check has two
+      halves — does this rule apply to this repository (a FACT: a directory
+      exists or it does not), and does this spec obey it (judgment). Only the
+      second is yours. The script prints every such fact unconditionally,
+      including the negative case. Record a conditional check as N/A ONLY when
+      a CONTEXT line says so, and QUOTE that line. If the script says a check
+      APPLIES, the report may not say N/A for it — that combination is itself
+      a lint failure.
+
+      KNOWN SCRIPT LIMITS — do not read silence as a pass:
+      - W7 matches SHAPES, not prose. A clause can breach altitude in plain
+        English with no backticks and W7 will say nothing.
+      - W7 candidates are candidates, not verdicts: a name can sit in both
+        ledgers and still be legitimate domain vocabulary. Say in the report
+        which you accepted and why.
+      - The vague-word check is lexical. "Valid", "fast", "reasonable",
+        "correct", "appropriate" without a concrete definition next to them
+        are findings whether or not the script flagged them.
+
+      JUDGMENT CHECKS — the script decides only whether these apply:
+      - Every scenario is testable with the DETECTED stack
+        (openspec/capability-profile.md), not an assumed one.
+      - Every error path is specified; no requirement leaves failure open.
+      - Every new public concept appears in "Concepts Introduced".
+      - Every reused concept exists in openspec/concept-inventory.md.
+      - Every "unreachable"/"cannot happen" claim has a type-level obligation
+        or an explicit runtime check.
+      - Every enum/GADT extension states how existing pattern matches behave.
+      - Every consumer-facing surface has a scenario asserting what the
+        consumer OBSERVES (parameter schema, not just presence).
+      - Behavior-preservation requirements over an enum/dispatch parameter
+        have one scenario PER variant, each asserting the discriminating
+        observable — not an aggregate call count.
+      - Concurrency requirements are testable with the detected deterministic
+        kit; if the profile records that kit ABSENT, that is a capability gap
+        to resolve, not an N/A.
+
+      VERDICT: PASS / FAIL per spec. A FAIL lists the exact offending headings
+      and what is missing. Do NOT proceed to design or implementation-order
+      while any spec is FAIL.
+    requires:
+      - specs
+
+  - id: design
+    generates: design.md
+    description: >
+      Technical design: architecture decisions, package structure, effect
+      boundaries, opaque-type strategy, verification
+      approach per module.
+    template: design.md
+    instruction: |
+      Write the technical design. It must cover:
+
+      1. PACKAGE STRUCTURE: which packages hold domain types, service traits,
+         infrastructure and test code, and the layer dependency rules. State
+         honestly whether these are ENFORCED or ADVISORY — read the capability
+         profile's static-analysis section. If no architecture rule is
+         installed, say "advisory" rather than implying a gate exists.
+      2. EFFECT BOUNDARIES: which code is pure and which is effectful. Service
+         traits are tagless final.
+      3. TYPE STRATEGY: which values get opaque types (this project uses
+         PLAIN Scala 3 opaque types — there is no Iron on the classpath)
+         constraints vs plain case classes. Rule of thumb: any value crossing
+         an API boundary or stored in a database gets a constrained opaque
+         type. Justify every refined type AND every deliberately plain one.
+      4. WIRE CONTRACT: if the change touches the HTTP surface. This project
+         has NO IDL — the contract is the TypeSafe HTTP API as documented,
+         realised by hand-written codecs in typesafe4s-core. State which
+         recorded fixtures pin the encoding, and which documented field the
+         change depends on. A wire fact taken from prose rather than from a
+         fixture is a claim: mark it and confirm it against a live key.
+
+
+      5. ERROR STRATEGY: how errors are modeled (sealed enum per service), how
+         they flow (Either in pure code, raiseError at the effect boundary),
+         and how they surface in API responses.
+      6. VERIFICATION MAP: per module, which rings apply and why. A ring the
+         capability profile records as UNAVAILABLE is marked unavailable here
+         with its correctness impact — not silently omitted.
+      7. TYPED CONTRACT PLACEMENT: which module owns each spec's contract file,
+         per the capability profile's placement rule.
+
+      Reference openspec/concept-inventory.md for existing patterns. Extend
+      existing approaches rather than inventing parallel ones.
+    requires:
+      - proposal
+      - concept-inventory
+      - spec-lint
+
+  - id: implementation-order
+    generates: implementation-order.md
+    description: >
+      Dependency-ordered implementation sequence. Each entry lists concepts
+      introduced and consumed, applicable rings, complexity, and GATE TIER.
+    template: implementation-order.md
+    instruction: |
+      Analyze all specs and produce a dependency-ordered sequence.
+
+      1. For each spec extract: Concepts Introduced, Concepts Used,
+         Applicable Rings (from the proposal's strategy + the spec's sections
+         + what the capability profile says is AVAILABLE), and complexity —
+         simple (no new types, <=1 new method), medium (new types OR complex
+         logic), high (new types AND complex logic AND Ring 4/5).
+
+      2. Build the dependency graph: spec A depends on spec B if A uses a
+         concept B introduces. Topologically sort. Order independent specs
+         simplest-first for faster feedback.
+
+      3. ASSIGN A GATE TIER per spec — this replaces v4's "Pseudocode?" column:
+
+         TWO GATES (default for medium/high): apply Step 1 stops for the typed
+           contract, then Step 2 stops again for the test oracle. Use when the
+           spec introduces new domain types, a new error algebra, or complex
+           business logic — cases where approving a wrong type surface would
+           mean rewriting the oracle written against it.
+
+         COMBINED (simple specs): Step 1 does NOT stop; the typed contract is
+           presented TOGETHER with the test oracle at a single gate at the end
+           of Step 2. Use for specs adding methods to existing traits with
+           existing types. The contract is still WRITTEN and still COMPILED —
+           combined means one interruption, never one less artifact.
+
+         WAIVER: no gate. Requires explicit human approval recorded here, with
+           a reason. Not available for any spec that introduces a concept.
+
+         Ceremony proportional to risk is the point: two gates on a one-method
+         change is how a workflow teaches people to route around it.
+
+      4. Record the applicable rings per spec, using THIS project's numbering
+         (0, 1, 1.5, 2, 3, 4, 5, 8). Ring 2 is mandatory everywhere. Ring 8 is
+         mandatory for every code-changing spec.
+
+      5. Create the checkbox list — the `tracks` target for the apply phase.
+         Add a BASELINE column: apply Step 0 records each spec's starting SHA
+         there, and every diff that spec's rings compute is taken against it.
+
+      6. Fill the Current position block at the top of the file: Next spec =
+         the first checkbox item, Last commit = "none", State ledger =
+         state.md (created at apply Step 0, rewritten at every step
+         boundary). The block is the resumption index a fresh session reads
+         first — the checkbox list stays authoritative; if they disagree,
+         the checkboxes win.
+
+      The order determined here is the EXACT order apply follows.
+    requires:
+      - specs
+      - design
+
+apply:
+  requires:
+    - implementation-order
+  tracks: implementation-progress.md
+  instruction: |
+    ███████████████████████████████████████████████████████████████████████████
+    ONE SPEC AT A TIME — MANDATORY HUMAN GATE BETWEEN EVERY SPEC
+    ███████████████████████████████████████████████████████████████████████████
+
+    The cycle is: implement ONE spec → checkpoint → WAIT → human approves →
+    next spec.
+
+    After completing ALL steps for a spec, you MUST stop, present the
+    checkpoint, and WAIT for the human to say "continue", "next", "proceed"
+    or similar. Moving to the next spec without explicit approval is a schema
+    violation.
+
+      "I'll just do the next one since it's simple" is NOT acceptable.
+      "The user said continue earlier, so I'll keep going" is NOT acceptable.
+      Each spec requires its own approval. No exceptions.
+
+    Read implementation-order.md for the sequence and this spec's GATE TIER.
+    Then implement ONE spec — the first pending one — following Steps 0–12.
+
+    ═══════════════════════════════════════════════════════════════════════════
+    STEP 0 — BASELINE + CONCEPT CHECK
+    ═══════════════════════════════════════════════════════════════════════════
+    BASELINE — record this spec's starting point FIRST:
+    - The working tree must be clean. If uncommitted changes exist, STOP and
+      resolve with the human — do not start a spec on a dirty tree.
+    - Record `git rev-parse HEAD` as the BASELINE SHA in
+      implementation-progress.md. EVERY diff this spec's rings compute — the
+      Ring 8 review diff, Ring 3 mutation targeting, Step 11 deltas — is
+      `git diff <baseline>`, NEVER the unanchored working-tree diff, which
+      after spec 1 contains other specs' changes.
+    - INVENTORY SNAPSHOT: run
+        scanner/scan.sh . --output openspec/changes/<change>/inventory-snapshots/<spec>-before.md
+      Step 11 re-runs it and machine-diffs the two.
+    - STATE LEDGER: openspec/changes/<change>/state.md is this change's
+      carry-forward file. Read it FIRST if it exists — it records current
+      spec, step, baseline, gate/ring status WITH evidence lines, capability
+      commands, known scanner gaps and the next action. Write it now and
+      rewrite it at every step boundary; a fresh context resumes from ~50
+      lines instead of cold-booting through the order/progress files.
+      Read openspec/capability-profile.md ONCE and record its command table
+      in the ledger — later steps use the ledger copy and re-read the
+      profile only when a recorded command actually fails.
+      Read the spec file TARGETED, not whole: `grep -n '^##' <spec>` for
+      headings, then read only the sections this step needs.
+
+    CONCEPT CHECK — LOOK UP, DO NOT READ WHOLE. openspec/concept-inventory.md
+    is a PROJECT-scoped living document (~940 rows today) that grows with the
+    project and is never archived. Reading it end-to-end to check a handful of
+    concepts is the single largest avoidable token cost in this workflow — it
+    is ~49% of a spec run, and rising. Look up exactly what this spec names:
+
+    a. Extract the concept names from the spec's "Implementation Anchors",
+       "Concepts Used" and "Concepts Introduced" tables. That set is bounded —
+       typically 5-15 names.
+    b. Look them up in ONE pass, alternating the names:
+         grep -nE '^\| `?(NameA|NameB|NameC)`? \|' openspec/concept-inventory.md
+       Each hit returns that concept's full row — package, constraint,
+       variants, provenance — which is everything the import needs.
+    c. A name with NO matching row is MISSING. grep tells you that directly,
+       and it is the trigger for the missing-concept branch below. Absence of
+       a row is evidence; do not infer absence from having skimmed.
+    d. If you need the file's shape (to append at Step 11, or to find which
+       table a concept belongs in), read the headings only:
+         grep -n '^## ' openspec/concept-inventory.md
+
+    Read the whole file ONLY when creating it, or when auditing it
+    end-to-end. Neither happens during a normal spec run.
+
+    For every concept the spec names:
+    - Verify it exists in the project source
+    - Import it — do NOT recreate it
+    If the spec EXTENDS an existing concept (an enum variant, a trait method),
+    modify the existing source file rather than creating a parallel version.
+
+    Verify the spec's Proof Obligations table is complete — every requirement,
+    scenario, invariant and type constraint has a declared mechanism. If not,
+    STOP: the spec must be fixed first.
+
+    PUBLIC-TYPE-CHANGE IMPACT SCAN — run when the spec aliases, widens, or
+    changes the variant set of a PUBLIC type (see the spec's "Type-Widening
+    Impact"). This closes the structural blind spot where aliasing to a richer
+    enum silently widens every downstream catch-all match WITH NO FILE EDIT:
+    - Run `scanner/impact-scan.sh <fqcn>`. It uses a compiler-resolved
+      reference set when a Metals endpoint is running and falls back to a
+      whole-tree grep by itself otherwise. Say which path it took — the grep
+      fallback is deterministic and sufficient, but less precise.
+    - For each catch-all site found, require one of, recorded in Proof
+      Obligations: made exhaustive over the new variant set; explicitly
+      rejects the new variants; or a justified `case` with rationale.
+    - Record the scan result (sites found + resolution) in the checkpoint.
+
+    REGISTRY GATE — BLOCKING (openspec/concepts/ exists in this project):
+    a. Run scanner/registry-check.sh — it must pass BEFORE you write code. A
+       stale Implementation-map row means the spec's ground truth has drifted:
+       fix the map first.
+    b. For every concept cited in "Concepts Used (behavioral)", open its
+       concept file and verify each state component and action the spec RELIES
+       ON is actually realized: read the fold/handler the Implementation map
+       points to. A field declared on a model shape but never populated by the
+       fold is NOT available. If a spec assumption contradicts the concept
+       file or the code, STOP and report the discrepancy instead of
+       implementing on top of it.
+    c. For every MUST-CONFIRM item: STOP and ask the human for the
+       authoritative data. Do NOT synthesize plausible values — fabricated
+       tables, codes or mappings are a schema violation even if every test
+       passes.
+
+    ═══════════════════════════════════════════════════════════════════════════
+    STEP 1 — TYPED CONTRACT ◄ MANDATORY — GENUINELY COMPILED
+    ═══════════════════════════════════════════════════════════════════════════
+    Read this spec's GATE TIER from implementation-order.md.
+
+    1. Generate a compile-only typed contract containing:
+       - Imports for reused concepts (exact packages from the inventory)
+       - New domain types: opaque type declarations, ADTs, enums
+       - Public method signatures and service/actor command signatures, `???`
+         bodies
+       - The error algebra (sealed error types, new variants on existing ones)
+       - Smart constructors for constrained types
+       - Compile-negative examples as `assertDoesNotCompile` stubs or comments
+         where the spec says something must not be constructible
+       - Property and generator obligations as structured comments
+       - Formal contract and temporal monitor sketches where relevant
+
+    2. PLACEMENT — the file MUST be part of the real sbt source graph, so that
+       compiling it is genuine type-level evidence. Files under
+       `openspec/changes/...` are NOT compiled by sbt and give FALSE
+       CONFIDENCE — v4 placed them there and ran a top-level `sbt compile`
+       that never touched them, so the human approved a skeleton nothing had
+       type-checked. Place the contract per the capability profile's rule:
+         <module>/src/test/scala/<pkg>/typecontract/<SpecName>TypeContract.scala
+
+    3. Compile it with the real project classpath:
+         sbt <module>/Test/compile
+       Fix until it GENUINELY compiles. Paste the success line.
+
+    4. GATE 1 — if this spec's tier is TWO GATES: STOP. Present the contract
+       (new types, signatures, error algebra, compile-negatives) and wait for
+       explicit approval.
+       If the tier is COMBINED: do NOT stop here — carry the contract
+       presentation into the single gate at the end of Step 2. The contract is
+       still written and still compiled either way.
+
+    ═══════════════════════════════════════════════════════════════════════════
+    STEP 2 — TEST ORACLE ◄ TESTS BEFORE IMPLEMENTATION
+    ═══════════════════════════════════════════════════════════════════════════
+    Generate the tests and properties for this spec NOW — from the SPEC and
+    the typed contract ONLY, before any implementation exists. Tests written
+    after an implementation tend to mirror it; tests written from the spec are
+    an independent ORACLE. This ordering is the point of the step, and it is
+    the single biggest change from v4, where Ring 2 ran after Ring 0.
+
+    Use the `openspec-property-tests` skill. It reads
+    openspec/capability-profile.md for the DETECTED framework — generate for
+    THAT framework, never an assumed one.
+
+    Requirements:
+    - One test per Scenario, named after the scenario heading
+    - One property per "Properties (Ring 2)" invariant, using the generator
+      strategy the spec declares. Prefer constructive generators. Where the
+      property library offers no coverage ASSERTION (see the profile), a
+      conditioned property can pass vacuously — make the interesting cases
+      reachable by construction, and use classify/collect to make coverage
+      visible even though it cannot fail the build.
+    - Model-based tests where the spec declares them (event-sourcing replay,
+      messaging ingestion, DSL semantics, serialization round-trips)
+    - Actor scenarios use the detected test kits (ActorTestKit,
+      BehaviorTestKit, PersistenceTestKit, TestProbe) — NEVER deferred to
+      "integration testing". There is no valid reason to defer a
+      command-handler or message-delivery scenario when these are on the
+      test classpath.
+    - CONCURRENCY ORACLE — scenarios involving concurrency, timeouts,
+      cancellation or interruption assert DETERMINISTIC observables
+      (ordering, final state, emitted events), never wall-clock timing.
+      `sleep`-and-hope tests are forbidden. If the profile records no
+      deterministic test kit, this scenario needs a setup task adding one or
+      an explicit human-approved waiver — it does not silently become a
+      timing test.
+    - COVERAGE — every Requirement and Scenario has at least one test, and
+      every concept in "Implementation Anchors" and "Concepts Introduced"
+      appears in EXECUTABLE test code: an import, type annotation, generator
+      type, value constructor, pattern match, or explicit assertion. A
+      comment mentioning the name does NOT count; neither does an indirect
+      test where the concept is implied but never named.
+    - ADVERSARIAL COVERAGE — for every requirement containing "only", "never"
+      or "must not", at least one test feeds an input the requirement forbids
+      and asserts rejection.
+    - Compile-negative obligations become `assertDoesNotCompile` tests.
+    - Every test cites its source: `// spec: <spec-name> — Scenario: <heading>`
+    - The tests must COMPILE against the typed contract
+      (`sbt <module>/Test/compile`). They are EXPECTED TO FAIL at runtime
+      until Step 3 — that is the point.
+    - ORACLE FAITHFULNESS — a test asserting a spec-named error variant MUST
+      assert that variant exactly. Do NOT loosen an assertion with
+      `.toString.contains(...)` / `message.contains(...)` / `||` substring
+      fallbacks to accommodate the implementation. If the implementation
+      cannot produce the named variant, the SPEC or the producing signature
+      changes (re-approved at this gate) — NEVER the oracle. Substring checks
+      are acceptable only for human-readable message text.
+    - GENERATOR FAITHFULNESS — generators are PART OF the approved oracle.
+      Narrowing one after approval (adding a filter/`suchThat`, tightening a
+      `Range`, dropping an edge case) is oracle tampering exactly like
+      loosening an assertion, and needs explicit human re-approval. During
+      Step 6's fix iterations the IMPLEMENTATION changes — never the
+      generators.
+
+    Produce three cross-reference tables (re-verified in Step 6):
+      A) | Spec Heading | Test Name | Status |
+      B) | Concept | Source | Test Reference | Status |
+      C) | Obligation | Enforcement | Test/Artifact | Status |
+
+    ORACLE POLARITY — prove the oracle CAN fail before trusting it. After it
+    compiles, RUN it once now, before any implementation, and classify every
+    new test:
+      RED — asserts new behavior; MUST fail at this run. A red-classified test
+        that PASSES pre-implementation is a broken oracle — vacuous,
+        tautological, or asserting behavior that already exists. Fix it BEFORE
+        the gate; right now it is proving nothing.
+      GREEN-BY-DESIGN — behavior-preservation/regression tests for refactors;
+        MUST pass at this run against the OLD code, and still pass after
+        Step 3. Their pre-implementation pass IS their evidential value.
+    A test that cannot be classified does not enter the oracle. The polarity
+    table (| Test | Polarity | Pre-impl result |) is part of the gate.
+
+    GATE 2 — STOP. Present the test oracle: property inventory, polarity
+    table, and the three coverage tables. Wait for explicit approval before
+    implementing. (COMBINED tier: this is the SINGLE gate — present the Step 1
+    typed contract together with the oracle here.)
+
+    ═══════════════════════════════════════════════════════════════════════════
+    STEP 3 — RING 0: IMPLEMENTATION + COMPILATION
+    ═══════════════════════════════════════════════════════════════════════════
+    Generate the full Scala 3 implementation to satisfy the approved contract
+    and oracle.
+    - Keep all approved type declarations and signatures EXACTLY as approved
+    - Import reused concepts from the inventory — do NOT recreate them
+    - Promote contract declarations into main sources; implement `???` bodies
+    - Extend existing enums/traits in their existing files
+    - All pattern matches over sealed types exhaustive (this build escalates
+      PatternMatchExhaustivity and MatchCaseUnreachable to errors — an
+      inexhaustive match FAILS, it does not warn)
+    - Use plain Scala 3 opaque types for new domain value types; `sealed` on new
+      domain traits and enums; `Ref` for mutable state — no `var`
+    Run the profile's compile command. Fix, re-compile. Maximum 3 iterations,
+    then STOP and present the errors.
+
+    ═══════════════════════════════════════════════════════════════════════════
+    STEP 4 — RING 1: LINT
+    ═══════════════════════════════════════════════════════════════════════════
+    Run the LINT COMMAND FROM THE CAPABILITY PROFILE — scoped to the change:
+      scanner/lint-diff.sh <baseline-sha>
+    runs the profile's scalafix/scalafmt checks and fails only on violations
+    in files this spec touched (the repo-wide baseline is dirty; ratchet:
+    a touched file must lint clean). This build has
+    `ThisBuild / semanticdbEnabled := true`, so no scalafixEnable prelude is
+    needed.
+    Fix DisableSyntax violations (var, null, throw, return, while) and unused
+    imports. Fix WartRemover violations. Re-run until clean. Max 2 iterations.
+
+    ═══════════════════════════════════════════════════════════════════════════
+    STEP 5 — RING 1.5: ARCHITECTURE
+    ═══════════════════════════════════════════════════════════════════════════
+    Read the capability profile's static-analysis section FIRST. If custom
+    architecture rules are ACTIVE, run them and fix violations. If the profile
+    records them as NOT INSTALLED, this ring is ADVISORY: check the design's
+    layer table by reading the imports you added, and say plainly in the
+    checkpoint that Ring 1.5 was advisory — not "✅ passed". A ring reported
+    as passing when no rule ran is a claim outrunning its evidence.
+
+    ═══════════════════════════════════════════════════════════════════════════
+    STEP 6 — RING 2: RUN THE TEST ORACLE ◄ MANDATORY — NO EXCEPTIONS
+    ═══════════════════════════════════════════════════════════════════════════
+    Ring 2 is MANDATORY for every spec, including pure refactorings,
+    thread-safety changes and internal restructurings.
+
+    Run the profile's test command.
+
+    - RED tests from Step 2 must now be GREEN. Any that is still red is an
+      unfinished implementation.
+    - GREEN-BY-DESIGN tests must STILL be green. One that turned red is a
+      behavior regression, not a test to adjust.
+    - If a property is falsified, read the counterexample and fix the
+      IMPLEMENTATION. The property is the spec. Do NOT weaken the property,
+      the assertion, or the generator. Max 3 iterations, then STOP and present
+      the counterexample.
+    - Re-verify the three cross-reference tables from Step 2 and fix gaps.
+
+    SPEC UPDATE — write the `## Requirement ↔ Test Cross-Reference` table into
+    the spec file, after "Properties (Ring 2)" and before "Verification
+    Rings", one row per Requirement/Scenario in declaration order.
+
+    ═══════════════════════════════════════════════════════════════════════════
+    STEP 7 — RING 8: ADVERSARIAL SPEC-COMPLIANCE REVIEW ◄ MANDATORY
+    ═══════════════════════════════════════════════════════════════════════════
+    Tests can pass while the implementation violates the English spec. This
+    project has already shipped exactly that: in
+    `add-eligibility-in-between-operators` every test passed while
+    `cmpOpToOrderOp` silently mapped invalid operators to `OrderOp.Lte` and
+    `cmpOpToCountOp` mapped IN/BETWEEN to `CountOp.Gte`. This ring hunts for
+    that class of bug.
+
+    POSITION — Ring 8 runs BEFORE the expensive rings (3/4/5) deliberately: it
+    is cheap (reading), it frequently changes code and adds tests, and
+    mutation must run on FINAL code — the tests this ring adds also kill
+    mutants, so the score recorded in Step 8 is the true one.
+
+    FRESH-CONTEXT MANDATE — the review MUST be performed by a reviewer with NO
+    implementation context. SPAWN A SUBAGENT with the
+    `openspec-adversarial-review` skill whose ONLY inputs are:
+      (a) the spec — every Requirement, Scenario, Property, Compile-Negative
+          and Proof Obligation,
+      (b) the approved typed contract, and
+      (c) `git diff <baseline-SHA>` — the Step 0 baseline, never the
+          unanchored working tree.
+    Explicitly NOT an input: the conversation that produced the code.
+    Self-review by the author context is the confirmation-bias setup this ring
+    exists to defeat — the author knows what the code is supposed to do and
+    reads that intent into it.
+
+    If a fresh context is genuinely impossible, SAY SO: the checkpoint carries
+    `fresh-context: no` and the human weighs the verdicts accordingly. Do not
+    quietly self-review and report it as Ring 8.
+
+    The reviewer must, at minimum:
+    1. Compare EVERY requirement against the diff, requirement by requirement,
+       including private helpers — that is where violations hide.
+    2. Run `scanner/danger-scan.sh <baseline-SHA>` for mechanical candidates,
+       then judge each hit: fallback/default mappings; `case _` in domain
+       logic returning a VALID value for invalid input; "unreachable" comments
+       without type-level proof; partial functions; `.get`; unchecked casts;
+       `@unchecked`; swallowed errors; default parameters masking missing
+       data. Every hit is fixed or justified with `// danger-scan:allow
+       <reason>`.
+    3. Ask whether a PUBLIC API can construct a state a requirement forbids —
+       exercising DIRECT construction paths, not just the sanctioned pipeline.
+    4. Ask whether the code could pass the CURRENT tests while violating the
+       spec (weak generators, untested helpers, untested direct construction).
+    5. Check the oracle was not tampered with since Step 2 — no assertion
+       loosened to substring matching where the spec names a structured
+       variant, no generator narrowed.
+
+    OUTPUT — one verdict per requirement: PASS / PARTIAL / FAIL, each with
+    evidence (file:line), why the tests missed it, and the fix class —
+    strongest first: type-level prevention, then smart constructor / explicit
+    rejection, then a targeted test. NEVER "add a defensive fallback": silent
+    mapping to valid behavior IS the bug, not the fix.
+
+    GATE: any FAIL → fix it (re-running Rings 0–2 as affected) before
+    proceeding. Any PARTIAL → fix it, or carry it to the checkpoint for
+    explicit human approval. No checkpoint may be presented as complete with a
+    FAIL outstanding.
+
+    ═══════════════════════════════════════════════════════════════════════════
+    STEP 8 — RING 3: MUTATION TESTING (if available)
+    ═══════════════════════════════════════════════════════════════════════════
+    Read the capability profile. If mutation tooling is absent, skip with a
+    stated correctness impact (consider the coverage tool as a weaker fallback
+    signal and record the decision).
+
+    typesafe4s HAS NO MUTATION TOOLING. There is no stryker4s.conf and no
+    sbt-stryker4s plugin. Ring 3 is UNAVAILABLE: skip it, state the
+    correctness impact, and do NOT report it as passed or not-applicable.
+    Adding the plugin is a build-dependency delta that needs approval.
+
+    IF it is later added: RETARGET FIRST. A stryker4s.conf with a fixed
+    `mutate` / `test-filter` list scores someone else's code when run
+    unchanged. Set both lists to THIS spec's changed files
+    (`git diff --name-only <baseline-SHA>`) before running. Mutating shared
+    client sources additionally requires naming which backend row runs the
+    tests, since the same source compiles into five.
+
+    Run the profile's mutation command. If the score is below the configured
+    threshold: identify surviving mutants, write a targeted test per survivor
+    citing `// spec: <spec-name> — Requirement: <title>`, update the spec's
+    cross-reference table, re-run. Max 2 iterations.
+
+    ═══════════════════════════════════════════════════════════════════════════
+    STEP 9 — RING 4: FORMAL VERIFICATION (if available)
+    ═══════════════════════════════════════════════════════════════════════════
+    APPLICABILITY IS A FACT: read the capability profile. Ring 4 requires a
+    Stainless module that EXISTS IN THIS REPOSITORY. A version number in
+    config.yaml is not a module. typesafe4s HAS NO SUCH MODULE — Ring 4 is
+    UNAVAILABLE. Skip it with its stated correctness impact, and do NOT
+    report it as passed, skipped-as-not-applicable, or already handled.
+
+    Note for this project: much of what Ring 4 would buy is already taken by
+    Ring 0, because the static API limits (Score levels 2-10, Choice options
+    <= 255, non-empty question sets) are enforced by `inline if` +
+    `compiletime.error` and proved by compile-negative tests. Prefer pushing
+    an invariant into the type system over wishing for a proof obligation
+    this repository cannot discharge.
+
+    If available: annotate the pure functions with the spec's require/ensuring
+    contracts and run the profile's verification command. If verification
+    fails, fix the IMPLEMENTATION, not the contracts. Max 2 iterations.
+
+    ═══════════════════════════════════════════════════════════════════════════
+    STEP 10 — RING 5: CROSS-BACKEND PARITY (if applicable)
+    ═══════════════════════════════════════════════════════════════════════════
+    REPURPOSED FOR typesafe4s. Upstream this ring verifies telemetry. This
+    project emits none. Its slot verifies the risk this project actually
+    carries: ONE shared source tree compiles into FIVE published artifacts,
+    and only an executed suite proves they behave the same.
+
+    APPLIES when the spec touches (a) shared client sources, (b) a backend
+    facade, (c) the transport or retry loop, or (d) anything whose behaviour
+    a user could observe through more than one backend artifact. A spec
+    confined to typesafe4s-core (pure, sans-IO, compiled once) does NOT need
+    this ring — say so and move on.
+
+    1. The behavioural suite is written ONCE against `CIO`, never per
+       backend. A test that exists only in the ZIO row proves nothing about
+       the other four.
+    2. RUN IT ON EVERY ROW and record each result separately. "The tests
+       pass" is not a Ring 5 verdict; five named green runs are. A row you
+       did not run is a row you cannot report.
+    3. API PARITY: run the compile-time parity check. An operation added to
+       one facade and forgotten on another MUST fail the build, not a review.
+    4. SEMANTIC DIVERGENCE IS DECLARED, NOT DISCOVERED. Where backends
+       genuinely differ — `Future` and Pekko cannot cancel, so interruption
+       is a documented no-op there — the difference belongs in the spec and
+       in the published docs. Hiding it behind a uniform-looking API is the
+       failure this ring exists to catch.
+    5. CANCELLATION IS THE KNOWN TRAP: kyo-compat's `fromCompletionStage`
+       does not propagate cancellation on its own. Any spec touching the
+       transport MUST assert, per cancelling backend, that an interrupted
+       caller aborts the in-flight exchange.
+    6. WRITEBACK: a divergence found here is a SPECIFICATION hole, not a
+       test to loosen. Never author a scenario from observed behaviour —
+       stop the apply phase and record the finding under
+       openspec/ring5-findings/.
+
+    DO NOT reach for otel4s, a monitor library, or any observability
+    dependency in this ring. There is none in this project, and introducing
+    one is a build-dependency delta that needs approval.
+
+    ═══════════════════════════════════════════════════════════════════════════
+    STEP 11 — CONCEPT DELTA CHECK + INVENTORY UPDATE
+    ═══════════════════════════════════════════════════════════════════════════
+    CONCEPT DELTA — verify the public concept surface changed EXACTLY as
+    committed:
+      new surface = previous inventory + Concepts Introduced + approved extensions
+    MECHANICAL: re-run
+      scanner/scan.sh . --output openspec/changes/<change>/inventory-snapshots/<spec>-after.md
+    and diff it against the Step 0 `-before` snapshot. THAT DIFF IS THE
+    CONCEPT DELTA — compare it line by line against the spec's "Concepts
+    Introduced" table plus approved extensions. Eyeballing the code diff is
+    the fallback, not the method. Anything extra: update the spec and get
+    human approval, or remove the concept. This is the scope-creep check.
+
+    ARTIFACT CHECK — run `scanner/spec-lint.sh --artifacts <change-dir>`. Now
+    that the implementation exists, every code-shaped Artifact token in the
+    Proof Obligations table must resolve to a tracked file (F9). This closes
+    the last link: requirement → obligation → ARTIFACT → a file that exists. A
+    suite named in the table but never written means the obligation was
+    discharged some other way — fix the row to name something real rather than
+    leaving a plausible fiction in the ledger.
+
+    BUILD-DEPENDENCY DELTA — run `git diff <baseline-SHA> -- build.sbt project/`.
+    Any NEW library dependency is an unreviewed behavior source: it must be
+    named in the proposal or design, or get explicit human approval at the
+    checkpoint. Otherwise remove it. Record the delta, or "none".
+
+    REMOVAL AUDIT — for every field or type REMOVED from a refactored concept,
+    audit main sources for now-orphaned dependents (traits, opaque adapters,
+    extension methods, helpers that existed only to serve the removed member).
+    Run `scanner/removal-audit.sh --suggest <baseline-SHA>`, then
+    `removal-audit.sh <suspect-fqcn>...` for who-still-uses verdicts. Each
+    orphan is deleted in this change or explicitly retained with rationale.
+    `RemoveUnused` does not flag public/opaque members — this audit is the
+    only thing that catches them.
+
+    INVENTORY UPDATE — append the verified NEW concepts to
+    openspec/concept-inventory.md, the PROJECT-scoped living file, with
+    provenance `spec:<change>/<spec>` so the next change inherits it instead
+    of re-scanning:
+    - New opaque types with their ACTUAL constraints (read the source; do not
+      record the constraint you intended)
+    - New enum variants on existing enums (modify the existing row)
+    - New methods on existing service traits (modify the existing row)
+    - New public API operations; new property generators
+
+    REGISTRY UPDATE — if this spec altered a concept's actions, state or
+    synchronizations, update openspec/concepts/*.md NOW: state declaration,
+    action cases, Implementation map rows, sync blocks, deviations. If a state
+    component changed, keep the fold row's "maps f1, f2, ..." declaration in
+    step with the fold's ACTUAL field list — registry-check verifies each name
+    against the fold's file. Re-run scanner/registry-check.sh: it must pass.
+    An implementation whose concept files are stale is not complete.
+
+    ███████████████████████████████████████████████████████████████████████████
+    STEP 12 — MANDATORY CHECKPOINT ◄ YOU MUST STOP HERE
+    ███████████████████████████████████████████████████████████████████████████
+
+    Mark the spec's checkbox in implementation-progress.md (- [ ] → - [x]).
+
+    COMMIT — create this spec's commit NOW: all production, test and
+    change-artifact edits for this spec, message
+      `<change-name>: spec <n>/<m> — <spec-name>`
+    The commit is the checkpoint's durable identity, the Step 0 baseline of
+    the NEXT spec, and what makes every per-spec diff in this schema exact.
+    Record the hash in implementation-progress.md.
+
+    Then present this structure and STOP:
+
+      ## ✓ Spec N/M complete: <spec-name>
+
+      **Commit:** <sha> (baseline was <baseline-sha>)
+      **Gate tier:** <two gates | combined | waiver>
+      **Files changed:** <list>
+      **Rings:** <✅/⏭️/advisory per ring, using 0/1/1.5/2/3/4/5/8>
+      **Verification evidence:** <PASTED final lines of the ACTUAL compile and
+        test output — success line, test counts. A ring claimed ✅ without
+        pasted tool output is NOT verified and the checkpoint is invalid.
+        Never present a checkpoint for code that has not been compiled.
+        A ring that was skipped says SKIPPED and why; a ring with no
+        enforcement installed says ADVISORY. Neither says ✅.>
+      **Oracle polarity:** <N red→green confirmed, M green-by-design held>
+      **Adversarial review (Ring 8):** <PASS/PARTIAL/FAIL per requirement>
+        (fresh-context: yes/no)
+      **Impact scan:** <sites found + resolution | n/a> (method: metals | grep)
+      **Proof obligations:** <all enforced | list of manually-reviewed ones>
+      **Concept delta (scanner diff):** <exactly as committed | deviations + resolution>
+      **Build-dependency delta:** <none | new deps + where approved>
+      **Removal audit:** <orphans found + resolution | none>
+      **Concepts added to inventory:** <list or "none">
+      **Concept registry files updated:** <list or "none / n.a.">
+      **Ring 5 findings opened:** <list or "none">
+      **Ring 5 findings resolved:** <list or "none">
+      **Design decisions made:** <deviations from the spec, notable choices>
+
+      ---
+      ⏸️  Waiting for your review before starting spec <N+1>: <next-spec-name>
+      Reply "continue" (or describe changes you want) to proceed.
+
+    DO NOT start Step 0 of the next spec until the human replies.
+    DO NOT say "I'll go ahead and start the next one."
+    DO NOT assume approval of a previous spec carries forward.
+
+    If the human requests changes: re-run only the affected rings, then
+    re-present this checkpoint.
+
+    ███████████████████████████████████████████████████████████████████████████
+
+    After ALL specs are approved and their checkboxes marked, present a final
+    summary with total ring results and the updated concept inventory.

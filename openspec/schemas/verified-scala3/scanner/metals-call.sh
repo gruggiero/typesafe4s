@@ -1,0 +1,205 @@
+#!/usr/bin/env bash
+# metals-call.sh — call a Metals MCP tool from the shell (option B of the
+# code-intelligence investigation: skills/scripts drive Metals' MCP HTTP
+# endpoint directly, no agent-side MCP registration needed).
+#
+# Speaks MCP streamable-HTTP: initialize → notifications/initialized →
+# tools/call, carrying the Mcp-Session-Id header across requests. Responses
+# may be plain JSON or SSE; both are handled.
+#
+# Usage:
+#   metals-call.sh list                      # list available tools
+#   metals-call.sh <tool> '<json-args>'     # call a tool
+#   metals-call.sh probe                    # exit 0 if the endpoint is up
+#   metals-call.sh resolve <Name|fq.Name>   # canonical FQCN(s) for a symbol
+#                                           # (nested/opaque symbols differ
+#                                           # from their source path — e.g.
+#                                           # RunnableOps.FallbackSemantic)
+# Endpoint discovery (per-project — Metals is workspace-scoped, so each
+# repo runs its own instance; see metals-start.sh):
+#   1. METALS_MCP_URL environment variable (explicit override)
+#   2. <repo-root>/.metals/mcp.url (written by metals-start.sh)
+#   3. <repo-root>/.metals/mcp.json — the client-discovery file IDE-started
+#      instances write ({"servers":{"<name>-metals":{"url":...}}})
+#
+# There is NO default URL — the previous default (localhost:8394) was a live
+# hazard: when several projects run metals-mcp, a foreign instance answers
+# there and every query silently returns ANOTHER project's index. Every
+# candidate is verified before use: the endpoint must initialize and report
+# serverInfo.name == "<repo-basename>-metals". A reachable-but-foreign
+# endpoint is rejected loudly; a wrong-workspace index is worse than no
+# index — grep fallback is honest, wrong answers are not.
+#
+# Examples:
+#   metals-call.sh glob-search '{"query":"AgentEvent"}'
+#   metals-call.sh inspect '{"fqcn":"org.adk4s.core.interrupt.AgentEvent"}'
+#   metals-call.sh get-usages '{"fqcn":"org.adk4s.core.interrupt.AgentEvent"}'
+#
+# Exit: 0 ok; 2 endpoint unreachable (callers should fall back to grep);
+#       1 tool error.
+set -euo pipefail
+
+ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
+WANT_NAME="$(basename "$ROOT")-metals"
+
+# Candidate endpoints in priority order, one per line.
+discover_url() {
+  if [ -n "${METALS_MCP_URL:-}" ]; then
+    printf '%s\n' "$METALS_MCP_URL"
+  fi
+  if [ -f "$ROOT/.metals/mcp.url" ]; then
+    head -1 "$ROOT/.metals/mcp.url"
+  fi
+  if [ -f "$ROOT/.metals/mcp.json" ] && command -v python3 >/dev/null; then
+    python3 -c '
+import sys, json
+try:
+    for s in json.load(open(sys.argv[1]))["servers"].values():
+        print(s["url"])
+except Exception:
+    pass' "$ROOT/.metals/mcp.json" 2>/dev/null
+  fi
+}
+
+# SSE responses arrive as "id:/event:/data:" lines — extract JSON payloads.
+unsse() {
+  if printf '%s\n' "$1" | grep -q '^data:'; then
+    printf '%s\n' "$1" | sed -n 's/^data: \{0,1\}//p'
+  else
+    printf '%s\n' "$1"
+  fi
+}
+
+# $1=url → prints serverInfo.name iff the endpoint initializes. Anything
+# answering on the port but not speaking MCP yields nothing.
+server_name() {
+  local resp
+  resp="$(curl -sS --max-time 8 -X POST "$1" \
+    -H 'Content-Type: application/json' \
+    -H 'Accept: application/json, text/event-stream' \
+    --data '{"jsonrpc":"2.0","id":0,"method":"initialize","params":{"protocolVersion":"2025-03-26","capabilities":{},"clientInfo":{"name":"metals-call.sh","version":"0.2"}}}' \
+    2>/dev/null)" || return 1
+  unsse "$resp" | python3 -c '
+import sys, json
+try:
+    print(json.load(sys.stdin)["result"]["serverInfo"]["name"])
+except Exception:
+    sys.exit(1)' 2>/dev/null
+}
+
+URL=""
+while IFS= read -r cand; do
+  [ -z "$cand" ] && continue
+  name="$(server_name "$cand" || true)"
+  [ -n "$name" ] || continue
+  if [ "$name" = "$WANT_NAME" ]; then
+    URL="$cand"
+    break
+  fi
+  echo "metals-call: $cand answers as '$name', expected '$WANT_NAME' — foreign workspace, skipped" >&2
+done <<CANDS
+$(discover_url)
+CANDS
+
+if [ -z "$URL" ]; then
+  echo "metals-call: no verified endpoint for this workspace ($WANT_NAME)." >&2
+  echo "  start one with scanner/metals-start.sh, or open the project in a" >&2
+  echo "  Metals IDE (it writes .metals/mcp.json). Fallback for callers: git grep." >&2
+  exit 2
+fi
+
+CMD="${1:-list}"
+ARGS="${2:-{\}}"
+
+post() { # $1=json body, $2=extra headers (optional "Mcp-Session-Id: x")
+  local hdr=()
+  [ -n "${2:-}" ] && hdr=(-H "$2")
+  curl -sS --max-time 120 -D /tmp/metals-call-headers.$$ \
+    -H 'Content-Type: application/json' \
+    -H 'Accept: application/json, text/event-stream' \
+    "${hdr[@]}" \
+    -X POST "$URL" --data "$1"
+}
+
+[ "$CMD" = "probe" ] && { echo "metals-call: $URL reachable (verified workspace: $WANT_NAME)"; exit 0; }
+
+# resolve: map a (possibly wrong) FQCN or simple name to canonical FQCN(s)
+# via glob-search — needed because nested symbols (Outer.Inner) and opaque
+# types (synthetic `package` object) differ from their source-path guess,
+# and get-usages on an unresolvable FQCN silently degrades to PACKAGE usages.
+if [ "$CMD" = "resolve" ]; then
+  NAME="${ARGS:-}"; NAME="${NAME//\{\}/}"
+  [ -n "$NAME" ] || { echo "usage: metals-call.sh resolve <Name|fq.Name>" >&2; exit 1; }
+  SIMPLE="${NAME##*.}"
+  # NO fileInFocus: glob-search scopes results to the focused file's module
+  # classpath — an arbitrary focus file silently empties cross-module hits.
+  CMD="glob-search"
+  ARGS="$(printf '{"query":"%s"}' "$SIMPLE")"
+  RESOLVE_FILTER="$SIMPLE"
+fi
+
+INIT='{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-03-26","capabilities":{},"clientInfo":{"name":"metals-call.sh","version":"0.1"}}}'
+# shellcheck disable=SC2034  # init_resp IS unused, deliberately: this call is
+# made for its SIDE EFFECT — `post` writes the response headers to the temp
+# file that the next line reads the session id out of. The assignment is what
+# keeps the response BODY off stdout; dropping it would leak the JSON into the
+# script's own output. Rewriting as `post "$INIT" >/dev/null` would be tidier
+# and is a candidate cleanup, but it is a behaviour change in a script this
+# spec does not otherwise touch, so it is left for a change that can test it.
+init_resp="$(post "$INIT")"
+SESSION="$(sed -n 's/^[Mm]cp-[Ss]ession-[Ii]d: *//p' /tmp/metals-call-headers.$$ | tr -d '\r' | head -1)"
+rm -f /tmp/metals-call-headers.$$
+
+sess_hdr=""
+[ -n "$SESSION" ] && sess_hdr="Mcp-Session-Id: $SESSION"
+
+post '{"jsonrpc":"2.0","method":"notifications/initialized"}' "$sess_hdr" >/dev/null || true
+
+if [ "$CMD" = "list" ]; then
+  body='{"jsonrpc":"2.0","id":2,"method":"tools/list"}'
+else
+  body="$(printf '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"%s","arguments":%s}}' "$CMD" "$ARGS")"
+fi
+
+resp="$(post "$body" "$sess_hdr")"
+rm -f /tmp/metals-call-headers.$$ 2>/dev/null || true
+out="$(unsse "$resp")"
+
+# Pretty-print: tool results carry content[].text; lists carry tools[].name
+render() {
+  if command -v python3 >/dev/null; then
+    printf '%s\n' "$1" | python3 -c '
+import sys, json, signal
+signal.signal(signal.SIGPIPE, signal.SIG_DFL)
+raw = sys.stdin.read().strip()
+for line in [l for l in raw.splitlines() if l.strip()]:
+    try:
+        msg = json.loads(line)
+    except json.JSONDecodeError:
+        print(line); continue
+    if "error" in msg:
+        print("ERROR:", msg["error"].get("message", msg["error"])); sys.exit(1)
+    result = msg.get("result", {})
+    if "tools" in result:
+        for t in result["tools"]:
+            print(t["name"] + ": " + t.get("description", "")[:100])
+    elif "content" in result:
+        for c in result["content"]:
+            if c.get("type") == "text":
+                print(c["text"])
+    elif result:
+        print(json.dumps(result, indent=2))
+'
+  else
+    printf '%s\n' "$1"
+  fi
+}
+
+if [ -n "${RESOLVE_FILTER:-}" ]; then
+  # keep symbols whose FQCN's last segment IS the requested simple name;
+  # strip the kind prefix so the output is directly usable as an fqcn arg
+  render "$out" | awk -v s="$RESOLVE_FILTER" '
+    { fq = $NF; n = split(fq, seg, "."); if (seg[n] == s) print fq }' | sort -u
+else
+  render "$out"
+fi

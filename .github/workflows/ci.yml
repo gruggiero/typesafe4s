@@ -1,0 +1,108 @@
+# spec: release-readiness — Requirement: Every row is built, tested and
+# linted in CI. A per-row matrix means a broken row fails the build under
+# its own name; the publish job runs only on tags and releases exactly the
+# published set (the future anchor row is compile-only and never publishes —
+# `checkPublicationContract` asserts that in `sbt check`).
+#
+# Every row cross-compiles on Scala 3.8.4 (`*_3_8_4` cells — the published
+# build; TASTy is forward-compatible so it serves 3.9.x callers too) and
+# 3.9.0 (`*_3_9_0` cells — compile/test only, the `_3` artifact suffix would
+# collide if both published). Matrix goals spell out both cells explicitly.
+name: CI
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+
+jobs:
+  check:
+    name: lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+      - uses: sbt/setup-sbt@v1
+      - run: sbt check
+
+  test:
+    name: test (${{ matrix.row }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { row: core, goal: "core/test; core3_9_0/test" }
+          - { row: clientZio, goal: "clientZio3_8_4/test; clientZio3_9_0/test" }
+          - { row: clientCe, goal: "clientCe3_8_4/test; clientCe3_9_0/test" }
+          - { row: clientOx, goal: "clientOx3_8_4/test; clientOx3_9_0/test" }
+          - { row: clientKyo, goal: "clientKyo3_8_4/test; clientKyo3_9_0/test" }
+          - { row: clientPekko, goal: "clientPekko3_8_4/test; clientPekko3_9_0/test" }
+          - { row: clientFuture, goal: "clientFuture3_8_4/Test/compile; clientFuture3_9_0/Test/compile" }
+          - { row: integrationTestsFuture, goal: "integrationTestsFuture3_8_4/Test/compile; integrationTestsFuture3_9_0/Test/compile" }
+          - { row: ceConformanceCe, goal: "ceConformanceCe3_8_4/test; ceConformanceCe3_9_0/test" }
+          - { row: jsonCirce, goal: "+jsonCirce/test" }
+          - { row: jsonZio, goal: "+jsonZio/test" }
+          - { row: jsonJsoniter, goal: "+jsonJsoniter/test" }
+          - { row: jsonUpickle, goal: "+jsonUpickle/test" }
+          - { row: examplesZio, goal: "examplesZio3_8_4/compile; examplesZio3_9_0/compile" }
+          - { row: examplesCe, goal: "examplesCe3_8_4/compile; examplesCe3_9_0/compile" }
+          - { row: examplesOx, goal: "examplesOx3_8_4/compile; examplesOx3_9_0/compile" }
+          - { row: examplesKyo, goal: "examplesKyo3_8_4/compile; examplesKyo3_9_0/compile" }
+          - { row: examplesPekko, goal: "examplesPekko3_8_4/compile; examplesPekko3_9_0/compile" }
+          - { row: examplesFuture, goal: "examplesFuture3_8_4/compile; examplesFuture3_9_0/compile" }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+      - uses: sbt/setup-sbt@v1
+      - run: sbt "${{ matrix.goal }}"
+
+  parity:
+    name: cross-backend parity
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+      - uses: sbt/setup-sbt@v1
+      # the credential-gated live suite skips without TYPESAFE_API_KEY;
+      # when a key is configured as a repository secret it runs here,
+      # performing one real exchange per row per scala version. The cells
+      # are spelled out (= `sbt parityAll` for 3.8.4 plus the 3.9.0 twins)
+      # so the checkReleaseReadiness token assertions see every row.
+      - run: >-
+          sbt "integrationTestsZio3_8_4/test; integrationTestsCe3_8_4/test;
+          integrationTestsOx3_8_4/test; integrationTestsKyo3_8_4/test;
+          integrationTestsPekko3_8_4/test; integrationTestsZio3_9_0/test;
+          integrationTestsCe3_9_0/test; integrationTestsOx3_9_0/test;
+          integrationTestsKyo3_9_0/test; integrationTestsPekko3_9_0/test"
+        env:
+          TYPESAFE_API_KEY: ${{ secrets.TYPESAFE_API_KEY }}
+
+  publish:
+    name: publish snapshots
+    runs-on: ubuntu-latest
+    needs: [check, test, parity]
+    if: startsWith(github.ref, 'refs/tags/')
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+      - uses: sbt/setup-sbt@v1
+      - run: sbt ci-release
+        env:
+          PGP_PASSPHRASE: ${{ secrets.PGP_PASSPHRASE }}
+          PGP_SECRET: ${{ secrets.PGP_SECRET }}
+          SONATYPE_PASSWORD: ${{ secrets.SONATYPE_PASSWORD }}
+          SONATYPE_USERNAME: ${{ secrets.SONATYPE_USERNAME }}

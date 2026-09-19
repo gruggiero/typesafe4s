@@ -1,0 +1,188 @@
+# openspec/config.yaml — Project configuration for the verified-scala3 schema
+#
+# Injected into ALL artifact instructions. Keep it short and TRUE — the schema
+# treats a claim here as a claim, not evidence. The authoritative sources are
+# the files referenced below, and openspec/capability-profile.md wins over this
+# block whenever they disagree.
+
+schema: verified-scala3
+
+# ── Project Context ──────────────────────────────────────────────────────
+context: |
+  PROJECT: typesafe4s — a Scala 3 SDK for the TypeSafe System One API
+  (https://docs.typesafe.ai, model family `jev`). It is a LIBRARY, not a
+  service: no HTTP server, no database, no Kafka, no deployment.
+
+  STATUS: BUILD STUB IN PLACE (2026-09-17). build.sbt, the backend matrix,
+  the vendored Cats Effect compat binding and a parity smoke suite exist and
+  are green. NO SDK BEHAVIOUR IS IMPLEMENTED — the specs are still authored
+  in the older spec-driven format and have not been migrated.
+
+  OBSERVED IN THIS REPOSITORY (not claimed — run these yourself to re-confirm):
+  - `sbt testUnit` green; `sbt check` (scalafmt) clean.
+  - `sbt conformanceCe` — 346 tests pass against the vendored binding.
+  - All six client rows compile: zio, ce, ox, kyo, pekko, future.
+  - The parity suite runs GREEN on all five published rows; the future row
+    is compile-only.
+  - Published artifact names: typesafe4s-core, typesafe4s-compat-ce,
+    typesafe4s-client-{zio,ce,ox,kyo,pekko}. `publish/skip` is true for the
+    future row, every integration-tests row, and root.
+  - Toolchain actually used: sbt 1.13.0 on JDK 26 with `-release 21`.
+
+  ALSO IN PLACE: openspec/capability-profile.md (detected) and
+  openspec/concepts/ (8 concepts). registry-check.sh and spec-lint both run
+  clean; spec-lint checks 3, 6 and 17 now APPLY.
+
+  ALSO DONE: all 8 specs migrated to this schema — spec-lint 0 FAIL,
+  8 PASS. A VirtualTime clock (ManualClock) is in place, written ONCE
+  against the carrier and green on all five rows, so timing requirements
+  are deterministic everywhere. The shared runtime reads time through a
+  Clock seam; never call the carrier's clock directly from shared code.
+
+  STILL OPEN: Rings 1.5/3/4 remain UNAVAILABLE — nothing is installed.
+  The compile-time API parity check (task 10.5) does not exist yet, so
+  facade drift is caught only by review. implementation-order is the last
+  artifact outstanding.
+
+  AUTHORITATIVE SOURCES (read these; do not rely on this block for detail):
+  - openspec/capability-profile.md — the DETECTED stack (generated
+    2026-09-17 from the real build). If this block disagrees with it, the
+    PROFILE WINS and this block gets fixed.
+  - openspec/concepts/ — the behavioural concept registry (8 concepts).
+    Specs name behaviour as Concept/action; code identifiers live only in a
+    concept's Implementation map. Those maps are EMPTY by design until a
+    spec is applied — never add a symbol before the code exists, or
+    registry-check.sh fails.
+  - openspec/project.md — module graph, conventions, published artifacts.
+  - docs/architecture-analysis.md — design rationale, trade-offs, and the
+    verification log of what was actually compiled.
+
+  DEFINING CONSTRAINT — EFFECT PORTABILITY:
+  The SDK must not force an effect system on its users. One runtime is
+  written ONCE against the kyo-compat carrier type `CIO[A]` and cross-
+  compiled by sbt-projectmatrix into one artifact per backend (ZIO, Cats
+  Effect, Ox, Kyo, Pekko), each with a thin facade supplying only `lower`
+  and `lift`. Shared sources must name NO backend. This follows Sage
+  (https://github.com/ghostdogpr/sage). It is the reason Ring 5 in this
+  project is BACKEND PARITY, not telemetry — see below.
+
+  BUILD & LANGUAGE (now detected, was planned):
+  - Scala 3.9.0 (named tuples, 3.7+, are load-bearing for the typed question
+    API — Scala 3.3 LTS is OUT OF SCOPE), sbt, JDK 21 target
+  - Compiler flags: -deprecation, -no-indent, -release 21,
+    -Wunused:imports,params,privates,implicits,explicits, -Wvalue-discard,
+    -Werror, -Xkind-projector
+  - sbt-projectmatrix, kyo-compat-plugin, sbt-buildinfo, sbt-ci-release,
+    sbt-scalafmt
+
+  LIBRARIES (now detected, was planned):
+  - kyo-compat 1.0.0-RC6 — the CIO/CStream carrier. PRE-1.0 and PINNED.
+    kyo-compat-ce was REMOVED upstream at RC6, so the Cats Effect binding is
+    vendored locally as typesafe4s-compat-ce and validated by the plugin's
+    bundled conformance suite.
+  - java.net.http.HttpClient — the default transport. NO third-party HTTP
+    library.
+  - typesafe4s-core has ZERO runtime dependencies, including no JSON library:
+    it ships its own JSON AST, parser and printer, with optional adapter
+    modules for circe / zio-json / jsoniter-scala / upickle.
+
+  TESTING (framework now on the classpath and exercised):
+  - MUnit 1.3.6 + munit-scalacheck 1.3.1 for properties. NOT ScalaTest.
+    NOT Hedgehog. Both are on the Test classpath of every module and MUnit
+    has executed real tests. munit-scalacheck is present but NO property has
+    been written yet — `munit.ScalaCheckSuite` is unexercised so far.
+  - The integration suite is written ONCE against `CIO` and RECOMPILED per
+    backend row — parity is tested, not assumed.
+  - Timing is tested against the project's own VirtualTime clock, NOT an
+    ecosystem test kit. TestControl (CE) and TestClock (ZIO) are absent and
+    Ox and Kyo ship no equivalent, so a carrier-level clock is the only
+    option that works on every row from one suite.
+  - DIVERGENCE to remember: the Ox binding's `unsafeRun` takes an
+    ExecutionContext; the other four do not. A shared suite supplies one
+    and marks it @unused.
+  - A stub `Transport` makes retries, error mapping, redaction and budget
+    splitting testable with no network. Live tests are gated on
+    TYPESAFE_API_KEY and skipped by default.
+
+  NOT IN THIS PROJECT (do not generate code for these, and do not claim a
+  ring that depends on them):
+  - Iron refined types — this project uses PLAIN Scala 3 opaque types.
+  - Smithy / smithy4s — there is no IDL; the wire contract is the TypeSafe
+    HTTP API, encoded by hand-written codecs against recorded fixtures.
+  - otel4s / OpenTelemetry — no telemetry, no spans, no observability module.
+  (Stainless and stryker4s WERE absent; both are now installed — see the
+  ring map below and openspec/capability-profile.md.)
+  - Scalafix / WartRemover — not configured. Ring 1 is scalafmt + -Werror
+    only; Ring 1.5 (architecture) is UNAVAILABLE.
+  - http4s, Pekko HTTP, doobie, Kafka, Databricks, PostgreSQL, OpenShift.
+    (Pekko appears ONLY as a backend axis for the client artifact.)
+
+  RING MAP FOR THIS PROJECT (numbering kept from the schema; Ring 5 is
+  REPURPOSED — this project has no telemetry to verify, and its genuine
+  cross-cutting runtime risk is behavioural divergence between backends):
+  - Ring 0 compile    — ALWAYS. `-Werror` is active, so warnings fail.
+  - Ring 1 lint       — scalafmt only until Scalafix/WartRemover are added.
+  - Ring 1.5 arch     — UNAVAILABLE (no architecture rules installed).
+  - Ring 2 properties — MANDATORY for every code-changing spec.
+  - Ring 3 mutation   — AVAILABLE. sbt-stryker4s 0.21.0; `sbt <cell>/stryker`.
+    RETARGET stryker4s.conf per spec, and name a matrix cell.
+  - Ring 4 formal     — AVAILABLE. Stainless 0.9.9.3 in the leaf verified/
+    build; run scripts/ring4.sh, never bare `sbt ring4`. A kernel without a
+    Ring 2 bridge property proves nothing about shipped code.
+  - Ring 5 PARITY     — cross-backend conformance, replacing telemetry.
+  - Ring 8 adversarial— MANDATORY, fresh context, before Rings 3/4/5.
+
+  CODING CONVENTIONS:
+  - Opaque types for domain values; no Iron.
+  - Errors are a SEALED hierarchy (`TypesafeException`) so callers match
+    exhaustively. ZIO gets typed errors; other backends get Throwable.
+  - Static API limits are COMPILE errors, not runtime failures: Score levels
+    2–10, Choice options <= 255, non-empty question sets.
+  - Secrets never render: `ApiKey` is opaque with a redacting `toString`.
+  - No var, no null, no throw in library code; no `asInstanceOf` outside the
+    one documented named-tuple coercion.
+  - Given/When/Then for requirements and scenarios.
+
+# ── Per-Artifact Rules ───────────────────────────────────────────────────
+rules:
+  proposal:
+    - Reference openspec/concept-inventory.md for existing types before proposing new ones
+    - Rings 3 and 4 are AVAILABLE (stryker4s, Stainless). Check a box only when the ring genuinely applies to the spec: Ring 4 wants a pure algorithmic invariant with a bridge property, not an effectful path; Ring 3 wants a retargeted stryker4s.conf
+    - Ring 5 here means CROSS-BACKEND PARITY, not telemetry. It applies when a spec changes shared runtime behaviour, a backend facade, or anything observable through more than one backend artifact
+    - State explicitly when a spec touches shared sources, since those compile into every backend artifact
+
+  capability-profile:
+    - Read build.sbt and project/plugins.sbt for exact versions; this project has no project/Versions.scala or Dependencies.scala
+    - Record that the repository is PRE-BUILD until build.sbt exists, and mark every ring except Ring 0 as unverified rather than available
+    - Record that -Werror IS active (warnings fail the build)
+    - Record the kyo-compat version and that the Cats Effect binding is VENDORED locally, not resolved from Maven
+    - Record which backend rows the matrix actually generates, and that the `future` row is compile-only and never published
+    - Record that no Scalafix or WartRemover configuration exists; stryker4s.conf and the verified/ Stainless build DO exist
+    - Record that the ScalaZ3 jar is an untracked local artifact — without it Ring 4 degrades to smt-z3
+
+  concept-inventory:
+    - This is the TYPE catalogue. The BEHAVIOUR catalogue is openspec/concepts/ — do not duplicate one into the other
+    - Scan the ACTUAL source tree; never invent entries
+    - The scanner reports the VENDORED `kyo.compat` types (CIO, CStream, CFiber, …) from typesafe4s-compat-ce. They are real and worth knowing — do not redefine them — but they are the CATS EFFECT binding's shapes. On the zio/ox/kyo/pekko rows the same names resolve to different underlying types, so never read an inventory row for `kyo.compat` as universal
+    - typesafe4s' own concept tables are still EMPTY: nothing specified has been implemented
+    - This project has NO Smithy models and NO Iron constraints — leave those sections empty rather than fabricating them
+    - Record opaque types, the Question/Answer GADT, the sealed error hierarchy, and the typeclasses (StateEncoder, Transport)
+
+  specs:
+    - Cite behaviour as Concept/action from openspec/concepts/ in the "Concepts Used (behavioral)" table; keep module, class and error-type names out of Given/When/Then and put them in Implementation Anchors
+    - Use Given/When/Then for ALL requirements
+    - Every spec MUST have at least 2 properties, written as INVARIANTS (forAll), not examples
+    - Properties use MUnit + munit-scalacheck — verify the framework against capability-profile.md before writing one
+    - Add a compile-negative obligation for every constraint the design claims is enforced at compile time
+    - A spec that changes shared runtime code MUST state its cross-backend parity obligation
+    - Timing requirements are expressed against the Clock seam and tested with the VirtualTime clock — a wall-clock assertion fails spec-lint check 18
+
+  design:
+    - There is no Smithy layout and no Iron strategy in this project — omit those sections rather than leaving empty headings
+    - Classify every module as pure (core) or effectful (client), and state which backend rows a change compiles into
+    - Justify any new dependency: typesafe4s-core has zero runtime dependencies and that is a contract, not a preference
+
+  implementation-order:
+    - Topological sort by concept dependency, not alphabetical
+    - Core specs before client specs; shared client specs before backend facades
+    - Every spec in the specs/ directory must appear in the sequence
