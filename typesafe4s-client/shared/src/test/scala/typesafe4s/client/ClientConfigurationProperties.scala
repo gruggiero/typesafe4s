@@ -130,7 +130,8 @@ final class ClientConfigurationProperties extends ScalaCheckSuite {
         TypesafeConfig.apiKeyEnv,
         TypesafeConfig.baseUrlEnv,
         TypesafeConfig.modelEnv,
-        TypesafeConfig.logLevelEnv
+        TypesafeConfig.logLevelEnv,
+        TypesafeConfig.timeoutEnv
       )
       classify(d.argKey.isDefined, "key arg present", "key arg absent") {
         classify(d.envKey.isDefined, "key env present", "key env absent") {
@@ -207,13 +208,13 @@ final class ClientConfigurationProperties extends ScalaCheckSuite {
     val _                             = TypesafeConfig.resolve(environment = env)
     assert(
       consulted.subsetOf(
-        Set(TypesafeConfig.apiKeyEnv, TypesafeConfig.baseUrlEnv, TypesafeConfig.modelEnv, TypesafeConfig.logLevelEnv)
+        Set(TypesafeConfig.apiKeyEnv, TypesafeConfig.baseUrlEnv, TypesafeConfig.modelEnv, TypesafeConfig.logLevelEnv, TypesafeConfig.timeoutEnv)
       ),
-      s"undocumented variables were consulted: ${consulted.diff(Set(TypesafeConfig.apiKeyEnv, TypesafeConfig.baseUrlEnv, TypesafeConfig.modelEnv, TypesafeConfig.logLevelEnv))}"
+      s"undocumented variables were consulted: ${consulted.diff(Set(TypesafeConfig.apiKeyEnv, TypesafeConfig.baseUrlEnv, TypesafeConfig.modelEnv, TypesafeConfig.logLevelEnv, TypesafeConfig.timeoutEnv))}"
     )
     assertEquals(
       consulted.toSet,
-      Set(TypesafeConfig.apiKeyEnv, TypesafeConfig.baseUrlEnv, TypesafeConfig.modelEnv, TypesafeConfig.logLevelEnv),
+      Set(TypesafeConfig.apiKeyEnv, TypesafeConfig.baseUrlEnv, TypesafeConfig.modelEnv, TypesafeConfig.logLevelEnv, TypesafeConfig.timeoutEnv),
       "with no arguments, every documented variable must be consulted"
     )
   }
@@ -241,6 +242,53 @@ final class ClientConfigurationProperties extends ScalaCheckSuite {
         assertEquals(variable, "TYPESAFE_LOG_LEVEL")
       case other                                   =>
         fail(s"expected InvalidConfiguration(TYPESAFE_LOG_LEVEL), got $other")
+    }
+  }
+
+  // --------------------------------------------------------------------------
+  // the per-attempt allowance: argument, else TYPESAFE_TIMEOUT, else the
+  // default; from either source a finite, positive duration
+  // --------------------------------------------------------------------------
+
+  private def allowanceOf(arg: Option[FiniteDuration], timeout: Option[String]): Either[TypesafeException, FiniteDuration] =
+    TypesafeConfig
+      .resolve(allowance = arg, environment = (Map(TypesafeConfig.apiKeyEnv -> "k") ++ timeout.map(TypesafeConfig.timeoutEnv -> _)).get)
+      .map(_.allowance)
+
+  test("the-allowance-follows-argument-environment-default") {
+    assertEquals(allowanceOf(None, None), Right(TypesafeConfig.defaultAllowance))
+    assertEquals(allowanceOf(None, Some("30s")), Right(30.seconds))
+    assertEquals(allowanceOf(None, Some("1500ms")), Right(1500.millis))
+    assertEquals(allowanceOf(None, Some(" 2 minutes ")), Right(2.minutes))
+    assertEquals(allowanceOf(Some(5.seconds), Some("30s")), Right(5.seconds))
+    // an argument wins even over an unusable environment value
+    assertEquals(allowanceOf(Some(5.seconds), Some("bogus")), Right(5.seconds))
+  }
+
+  test("an-unusable-allowance-fails-naming-the-variable") {
+    val refused = List(
+      allowanceOf(None, Some("0s")),
+      allowanceOf(None, Some("-5s")),
+      allowanceOf(None, Some("Inf")),
+      allowanceOf(None, Some("30")),
+      allowanceOf(None, Some("thirty seconds")),
+      allowanceOf(None, Some("")),
+      allowanceOf(Some(Duration.Zero), None),
+      allowanceOf(Some(FiniteDuration(-1L, SECONDS)), None)
+    )
+    refused.foreach {
+      case Left(InvalidConfiguration(variable, detail)) =>
+        assertEquals(variable, TypesafeConfig.timeoutEnv)
+        assert(detail.nonEmpty)
+      case other                                        => fail(s"expected InvalidConfiguration(TYPESAFE_TIMEOUT), got $other")
+    }
+  }
+
+  test("an-unusable-allowance-never-echoes-the-secret") {
+    val env: String => Option[String] = Map(TypesafeConfig.apiKeyEnv -> "sekret-key", TypesafeConfig.timeoutEnv -> "sekret-key").get
+    TypesafeConfig.resolve(environment = env) match {
+      case Left(e) => assert(!e.getMessage.contains("sekret-key"), e.getMessage)
+      case other   => fail(s"expected a refusal, got $other")
     }
   }
 

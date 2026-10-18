@@ -1,6 +1,7 @@
 package typesafe4s.client
 
 import scala.concurrent.duration.*
+import scala.util.Try
 
 import typesafe4s.{ApiKey, RetryPolicy, TypesafeException}
 
@@ -47,6 +48,7 @@ object TypesafeConfig {
   val baseUrlEnv  = "TYPESAFE_BASE_URL"
   val modelEnv    = "TYPESAFE_DEFAULT_MODEL"
   val logLevelEnv = "TYPESAFE_LOG_LEVEL"
+  val timeoutEnv  = "TYPESAFE_TIMEOUT"
 
   // the documented defaults
   val defaultBaseUrl   = "https://api.typesafe.ai"
@@ -64,13 +66,18 @@ object TypesafeConfig {
     *
     * `environment` is the injectable seam — production reads `sys.env`, the
     * oracle records the consulted names.
+    *
+    * `allowance` bounds each attempt. From the environment it is read from
+    * `TYPESAFE_TIMEOUT` in `scala.concurrent.duration.Duration` syntax
+    * (`30s`, `1500ms`, `2 minutes`); from either source it must be a finite,
+    * positive duration, else `InvalidConfiguration(TYPESAFE_TIMEOUT, ...)`.
     */
   def resolve(
     apiKey: Option[String] = None,
     baseUrl: Option[String] = None,
     model: Option[String] = None,
     logLevel: Option[String] = None,
-    allowance: FiniteDuration = defaultAllowance,
+    allowance: Option[FiniteDuration] = None,
     retryPolicy: RetryPolicy = RetryPolicy.default,
     headers: List[(String, String)] = Nil,
     environment: String => Option[String] = sys.env.get
@@ -88,6 +95,7 @@ object TypesafeConfig {
       .map(ApiKey.of)
       .toRight(MissingCredential(apiKeyEnv): TypesafeException)
     val level = logLevel.orElse(environment(logLevelEnv))
+    val limit = allowance.map(Right(_)).orElse(environment(timeoutEnv).map(raw => parseAllowance(raw).toRight(raw)))
     for {
       key    <- keyE
       parsed <- level match {
@@ -103,14 +111,29 @@ object TypesafeConfig {
                         InvalidConfiguration(logLevelEnv, s"'${key.redact(raw)}' is not a log level"): TypesafeException
                       )
                 }
+      within <- limit match {
+                  case None                                => Right(defaultAllowance)
+                  case Some(Right(d)) if d > Duration.Zero => Right(d)
+                  case Some(Right(d))                      =>
+                    Left(InvalidConfiguration(timeoutEnv, s"the per-attempt allowance must be positive, got $d"): TypesafeException)
+                  case Some(Left(raw))                     =>
+                    Left(
+                      InvalidConfiguration(timeoutEnv, s"'${key.redact(raw)}' is not a positive duration such as 30s or 1500ms"): TypesafeException
+                    )
+                }
     } yield TypesafeConfig(
       apiKey = key,
       baseUrl = baseUrl.orElse(environment(baseUrlEnv)).getOrElse(defaultBaseUrl),
       model = model.orElse(environment(modelEnv)).getOrElse(defaultModel),
-      allowance = allowance,
+      allowance = within,
       retryPolicy = retryPolicy,
       headers = headers,
       logLevel = parsed
     )
   }
+
+  // an environment value is a finite, positive Duration string; anything
+  // else (unparseable, infinite, zero, negative) is reported by `resolve`
+  private def parseAllowance(raw: String): Option[FiniteDuration] =
+    Try(Duration(raw.trim)).toOption.collect { case d: FiniteDuration if d > Duration.Zero => d }
 }
