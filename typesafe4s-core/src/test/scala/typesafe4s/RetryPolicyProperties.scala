@@ -37,7 +37,7 @@ final class RetryPolicyProperties extends ScalaCheckSuite {
   private def notFound                                    = NotFound(rid, "unknown")
   private def unprocessable                               = UnprocessableEntity(rid, "unprocessable")
   private def rateLimit(d: Option[FiniteDuration] = None) = RateLimit(rid, d, "too many")
-  private def overloaded                                  = Overloaded(rid, "overloaded")
+  private def overloaded                                  = Overloaded(rid, None, "overloaded")
   private def internalServer(s: Int)                      = InternalServer(s, rid, "service fault")
   private def responseValidation                          = ResponseValidation(rid, "answers.q", "wrong shape")
   private def connectionFailed                            = ConnectionFailed(new java.io.IOException("refused"))
@@ -196,8 +196,8 @@ final class RetryPolicyProperties extends ScalaCheckSuite {
   }
 
   // spec: retry-policy — Requirement: a wait the service asks for. Only
-  // RateLimit names a delay; the flag turns the whole mechanism off; every
-  // other member advises nothing.
+  // RateLimit and Overloaded name a delay; the flag turns the whole
+  // mechanism off; every other member advises nothing.
   test("advised-delay-is-the-service-named-one-only") {
     val default = RetryPolicy.default
     val off     = RetryPolicy.of(preferServiceDelay = false)
@@ -220,7 +220,9 @@ final class RetryPolicyProperties extends ScalaCheckSuite {
     assertEquals(default.advisedDelay(rateLimit(Some(3.seconds))), Some(3.seconds))
     assertEquals(default.advisedDelay(rateLimit(None)), None, "a RateLimit naming no delay advises none")
     assertEquals(off.advisedDelay(rateLimit(Some(3.seconds))), None, "the preference flag must disable the mechanism")
-    assert(family.forall(e => default.advisedDelay(e).isEmpty), "a member other than a delay-carrying RateLimit advised a delay")
+    assertEquals(default.advisedDelay(Overloaded(rid, Some(2.seconds), "busy")), Some(2.seconds))
+    assertEquals(off.advisedDelay(Overloaded(rid, Some(2.seconds), "busy")), None, "the preference flag must disable the mechanism")
+    assert(family.forall(e => default.advisedDelay(e).isEmpty), "a member that named no delay advised one")
   }
 
   // --------------------------------------------------------------------------

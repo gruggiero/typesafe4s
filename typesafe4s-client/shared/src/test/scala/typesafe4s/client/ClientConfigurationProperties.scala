@@ -330,7 +330,7 @@ final class ClientConfigurationProperties extends ScalaCheckSuite {
     NotFound(rid, "unknown"),
     UnprocessableEntity(rid, "unprocessable"),
     RateLimit(rid, Some(3.seconds), "too many"),
-    Overloaded(rid, "overloaded"),
+    Overloaded(rid, None, "overloaded"),
     InternalServer(503, rid, "service fault"),
     ResponseValidation(rid, "answers.q", "wrong shape"),
     ConnectionFailed(new java.io.IOException("refused")),
