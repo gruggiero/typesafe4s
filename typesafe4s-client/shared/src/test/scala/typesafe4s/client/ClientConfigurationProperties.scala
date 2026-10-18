@@ -47,6 +47,11 @@ final class ClientConfigurationProperties extends ScalaCheckSuite {
   private val genValue: Gen[String] =
     Gen.oneOf("", "x", "jev", "api.typesafe.ai", "custom.example", "v 1")
 
+  // usable base URLs only — unusable ones have their own scenarios below;
+  // a trailing slash is drawn so normalisation is reached by construction
+  private val genUrl: Gen[String] =
+    Gen.oneOf("https://api.typesafe.ai", "https://custom.example/", "https://gw.example/typesafe", "http://localhost:8080/", "http://127.0.0.1:9000")
+
   private val genLevel: Gen[String] =
     Gen.oneOf("debug", "info", "warn", "warning", "error", "DEBUG", "Info", "bogus", "")
 
@@ -66,8 +71,8 @@ final class ClientConfigurationProperties extends ScalaCheckSuite {
     for {
       argKey   <- Gen.option(genValue)
       envKey   <- Gen.option(genValue)
-      argUrl   <- Gen.option(genValue)
-      envUrl   <- Gen.option(genValue)
+      argUrl   <- Gen.option(genUrl)
+      envUrl   <- Gen.option(genUrl)
       argModel <- Gen.option(genValue)
       envModel <- Gen.option(genValue)
       argLevel <- Gen.option(genLevel)
@@ -139,7 +144,7 @@ final class ClientConfigurationProperties extends ScalaCheckSuite {
             case (Right(cfg), Right((key, level))) =>
               onlyDocumented &&
                 cfg.apiKey.authorization == ("Authorization" -> s"Bearer $key") &&
-                cfg.baseUrl == d.argUrl.orElse(d.envUrl).getOrElse(TypesafeConfig.defaultBaseUrl) &&
+                cfg.baseUrl == d.argUrl.orElse(d.envUrl).getOrElse(TypesafeConfig.defaultBaseUrl).stripSuffix("/") &&
                 cfg.model == d.argModel.orElse(d.envModel).getOrElse(TypesafeConfig.defaultModel) &&
                 cfg.logLevel == level &&
                 cfg.allowance == TypesafeConfig.defaultAllowance
@@ -241,6 +246,62 @@ final class ClientConfigurationProperties extends ScalaCheckSuite {
         assertEquals(variable, "TYPESAFE_LOG_LEVEL")
       case other                                   =>
         fail(s"expected InvalidConfiguration(TYPESAFE_LOG_LEVEL), got $other")
+    }
+  }
+
+  // --------------------------------------------------------------------------
+  // the base URL: absolute https (http only for loopback), no query,
+  // fragment or user info, trailing slashes removed
+  // --------------------------------------------------------------------------
+
+  private def baseUrlOf(url: String): Either[TypesafeException, String] =
+    TypesafeConfig.resolve(apiKey = Some("sekret-key"), baseUrl = Some(url), environment = _ => None).map(_.baseUrl)
+
+  test("a-usable-base-url-is-normalised") {
+    assertEquals(baseUrlOf("https://api.typesafe.ai/"), Right("https://api.typesafe.ai"))
+    assertEquals(baseUrlOf("https://api.typesafe.ai//"), Right("https://api.typesafe.ai"))
+    assertEquals(baseUrlOf(" https://gw.example:8443/typesafe/ "), Right("https://gw.example:8443/typesafe"))
+    assertEquals(baseUrlOf("HTTPS://api.typesafe.ai"), Right("HTTPS://api.typesafe.ai"))
+    assertEquals(baseUrlOf("http://localhost:8080"), Right("http://localhost:8080"))
+    assertEquals(baseUrlOf("http://127.0.0.1:8080/"), Right("http://127.0.0.1:8080"))
+    assertEquals(baseUrlOf("http://[::1]:8080"), Right("http://[::1]:8080"))
+    val fromEnv = TypesafeConfig.resolve(environment = Map(TypesafeConfig.apiKeyEnv -> "k", TypesafeConfig.baseUrlEnv -> "https://env.example/").get)
+    assertEquals(fromEnv.map(_.baseUrl), Right("https://env.example"))
+  }
+
+  test("an-unusable-base-url-fails-naming-the-variable") {
+    val refused = List(
+      "http://example.com",
+      "http://127.0.0.1.example.com",
+      "http://localhost.example.com",
+      "ftp://api.typesafe.ai",
+      "api.typesafe.ai",
+      "/v1",
+      "",
+      "https://",
+      "https://exa mple.com",
+      "mailto:someone@example.com",
+      "https://api.typesafe.ai?x=1",
+      "https://api.typesafe.ai#frag",
+      "https://user:sekret-key@api.typesafe.ai"
+    )
+    refused.foreach { url =>
+      baseUrlOf(url) match {
+        case Left(e @ InvalidConfiguration(variable, _)) =>
+          assertEquals(variable, TypesafeConfig.baseUrlEnv, url)
+          assert(!e.getMessage.contains("sekret-key"), e.getMessage)
+        case other                                       => fail(s"expected InvalidConfiguration(TYPESAFE_BASE_URL) for '$url', got $other")
+      }
+    }
+  }
+
+  test("an-unusable-base-url-from-the-environment-never-echoes-the-secret") {
+    val env: String => Option[String] = Map(TypesafeConfig.apiKeyEnv -> "sekret-key", TypesafeConfig.baseUrlEnv -> "http://sekret-key.example").get
+    TypesafeConfig.resolve(environment = env) match {
+      case Left(e @ InvalidConfiguration(variable, _)) =>
+        assertEquals(variable, TypesafeConfig.baseUrlEnv)
+        assert(!e.getMessage.contains("sekret-key"), e.getMessage)
+      case other                                       => fail(s"expected InvalidConfiguration, got $other")
     }
   }
 
