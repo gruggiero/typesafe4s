@@ -92,6 +92,7 @@ TYPESAFE_API_KEY=… sbt parityAll
 
 ## Documentation
 
+- [Changelog](CHANGELOG.md) — what changed in each release
 - [Architecture analysis](docs/architecture-analysis.md) — design rationale and trade-offs
 - [Project context](openspec/project.md) — module graph, stack, conventions
 - [Implementation change](openspec/changes/add-typesafe4s-sdk/) — proposal, design, specs, tasks
