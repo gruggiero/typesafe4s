@@ -80,6 +80,18 @@ sbt "examplesCe3_8_4/runMain typesafe4s.examples.ConfidenceRouting"   # confiden
 # (each row also has a `3_9_0` cell — see "Scala versions" below)
 ```
 
+## User-Agent
+
+Every request names the SDK, its version, the backend and the Scala version, which helps the
+service answer support questions:
+
+```
+User-Agent: typesafe4s/0.1.0 (zio; scala/3.8.4)
+```
+
+A `User-Agent` in the configured `headers` is kept, with the SDK's token after it
+(`myapp/2.3 typesafe4s/0.1.0 (zio; scala/3.8.4)`).
+
 ## Live tests
 
 The parity suite includes credential-gated live tests: with `TYPESAFE_API_KEY` set they perform a
