@@ -596,7 +596,23 @@ lazy val examples = (projectMatrix in file("examples"))
   .compatLibrary(KyoLib, ZioLib, CeLib, OxLib, PekkoLib)(VirtualAxis.jvm)(Seq(scala38, scala39))
   .bindLocally(CeLib, compatCe)
 
+// What Maven Central search, Scaladex and IDEs show for each artifact (#59); without it the POM
+// description is just the artifact name.
+def moduleDescription(module: String): String = {
+  val sdk      = "the Scala 3 SDK for the TypeSafe System One API (typed questions, calibrated answers)"
+  val backends = Map("zio" -> "ZIO", "ce" -> "Cats Effect", "ox" -> "Ox", "kyo" -> "Kyo", "pekko" -> "Pekko", "future" -> "Future")
+  val adapters = Map("circe" -> "circe", "zio-json" -> "zio-json", "jsoniter" -> "jsoniter-scala", "upickle" -> "uPickle")
+  module.stripPrefix("typesafe4s-") match {
+    case "core"                       => s"The pure, dependency-free core of typesafe4s, $sdk"
+    case "compat-ce"                  => "The Cats Effect binding of kyo-compat, vendored for typesafe4s-client-ce"
+    case m if m.startsWith("client-") => s"typesafe4s for ${backends.getOrElse(m.stripPrefix("client-"), m)}: $sdk"
+    case m if adapters.contains(m)    => s"Use ${adapters(m)} JSON values as typesafe4s evaluation state"
+    case _                            => s"typesafe4s, $sdk"
+  }
+}
+
 lazy val commonSettings = Def.settings(
+  description        := moduleDescription(moduleName.value),
   // cross-compile every module on both minors; only the 3.8.4 build may
   // publish (both share the `_3` suffix — a second publish would collide
   // on identical coordinates, and the lower build is the widest-compatible)

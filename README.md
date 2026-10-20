@@ -1,5 +1,11 @@
 # typesafe4s
 
+[![CI](https://github.com/gruggiero/typesafe4s/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/gruggiero/typesafe4s/actions/workflows/ci.yml)
+[![Maven Central](https://img.shields.io/maven-central/v/io.github.gruggiero/typesafe4s-core_3)](https://central.sonatype.com/namespace/io.github.gruggiero)
+[![Scala 3](https://img.shields.io/badge/scala-3.8%2B-dc322f?logo=scala)](https://www.scala-lang.org/)
+[![JDK 21+](https://img.shields.io/badge/JDK-21%2B-437291)](#development)
+[![License](https://img.shields.io/github/license/gruggiero/typesafe4s)](LICENSE)
+
 A Scala 3 SDK for the [TypeSafe](https://docs.typesafe.ai) System One API (`jev` model family):
 send state and typed questions, get typed answers with calibrated probabilities.
 
