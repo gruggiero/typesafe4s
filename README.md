@@ -146,6 +146,10 @@ Formats; `sbt check` verifies formatting without writing.
 | `integration-tests` | — | One parity suite, recompiled and run on every row. |
 | `examples` | — | Per-row runnable examples; compiled in CI so they cannot rot. |
 
+## Security
+
+Please report vulnerabilities privately, as described in [SECURITY.md](SECURITY.md), not in a public issue.
+
 ## License
 
 Apache License 2.0 — see [LICENSE](LICENSE). The vendored `typesafe4s-compat-ce` sources originate from
