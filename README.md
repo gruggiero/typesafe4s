@@ -80,6 +80,31 @@ sbt "examplesCe3_8_4/runMain typesafe4s.examples.ConfidenceRouting"   # confiden
 # (each row also has a `3_9_0` cell — see "Scala versions" below)
 ```
 
+## Behind a corporate proxy
+
+The default transport is the JDK's `HttpClient`. `JdkHttpTransport.configured` builds one with
+your settings, and the client closes it when it is closed, like the default:
+
+```scala
+import java.net.{InetSocketAddress, ProxySelector}
+import java.net.http.HttpClient
+import scala.concurrent.duration.*
+import typesafe4s.client.JdkHttpTransport
+
+val transport = JdkHttpTransport.configured(
+  proxy = Some(ProxySelector.of(InetSocketAddress("proxy.corp.example", 3128))),
+  connectTimeout = Some(5.seconds),
+  version = Some(HttpClient.Version.HTTP_1_1) // for a proxy that mishandles HTTP/2
+)
+// then: TypesafeClient.scoped(config, transport)
+```
+
+`proxy = Some(ProxySelector.getDefault)` follows the standard `-Dhttps.proxyHost` and
+`-Dhttps.proxyPort` system properties instead. A proxy that asks for credentials takes
+`authenticator = Some(...)`; note that the JDK refuses Basic authentication for HTTPS tunnels
+unless `jdk.http.auth.tunneling.disabledSchemes` is cleared. For anything else, build the
+`HttpClient` yourself and pass it to `JdkHttpTransport.withClient`, which leaves closing it to you.
+
 ## Live tests
 
 The parity suite includes credential-gated live tests: with `TYPESAFE_API_KEY` set they perform a
