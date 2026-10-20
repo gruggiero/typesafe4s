@@ -41,6 +41,17 @@ Optional JSON adapters — each pulls in exactly its own library and nothing els
 "io.github.gruggiero" %% "typesafe4s-upickle"  % "0.1.0"  // uPickle
 ```
 
+## Compatibility
+
+Versions follow [early semantic versioning](https://www.scala-lang.org/blog/2021/02/16/preventing-version-conflicts-with-versionscheme.html),
+and the published POMs declare it (`versionScheme`), so sbt and other build tools can report a real conflict:
+
+- a **patch** release (0.1.0 → 0.1.1) is binary compatible: fixes only, safe to upgrade;
+- a **minor** release (0.1 → 0.2) may break compatibility while the version is 0.x.
+
+`sbt check` runs [MiMa](https://github.com/lightbend-labs/mima) on every published artifact against
+the previous release, so a patch cannot break code compiled against it.
+
 ## Supported backends
 
 All five rows ship at 0.1 — **ZIO, Cats Effect, Ox, Kyo and Pekko**. A sixth `future` row exists as
