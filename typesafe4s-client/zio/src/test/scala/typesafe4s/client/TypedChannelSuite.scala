@@ -56,7 +56,7 @@ final class TypedChannelSuite extends FunSuite {
   // (the runtime half). A service refusal arrives through the channel as a
   // typed failure — not as a defect, and not widened to Throwable.
   test("a-failure-arrives-in-the-typed-channel") {
-    val member  = Overloaded(RequestId.fromHeader("req-x"), "overloaded")
+    val member  = Overloaded(RequestId.fromHeader("req-x"), None, "overloaded")
     val program =
       for {
         clock     <- ManualClock.init
