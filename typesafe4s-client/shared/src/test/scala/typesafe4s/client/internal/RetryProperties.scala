@@ -47,7 +47,7 @@ final class RetryProperties extends ScalaCheckSuite {
   private def notFound                                    = NotFound(rid, "unknown")
   private def unprocessable                               = UnprocessableEntity(rid, "unprocessable")
   private def rateLimit(d: Option[FiniteDuration] = None) = RateLimit(rid, d, "too many")
-  private def overloaded                                  = Overloaded(rid, "overloaded")
+  private def overloaded                                  = Overloaded(rid, None, "overloaded")
   private def internalServer(s: Int)                      = InternalServer(s, rid, "service fault")
   private def responseValidation                          = ResponseValidation(rid, "answers.q", "wrong shape")
   private def connectionFailed                            = ConnectionFailed(new java.io.IOException("refused"))
@@ -369,6 +369,27 @@ final class RetryProperties extends ScalaCheckSuite {
         assertEquals(run.attempts, 2)
       }
       .unsafeRun
+  }
+
+  // an overloaded service (529) names its delay the same way: preferred
+  // when the flag is on, the derived wait when it is off, still bound-gated
+  test("an-overloaded-service-names-a-delay") {
+    def policy(prefer: Boolean, bound: Option[FiniteDuration]) =
+      RetryPolicy.of(attempts = 1, initialWait = 1.second, ceiling = 5.seconds, jitter = 0.0, preferServiceDelay = prefer, totalBound = bound)
+    val failure                                                = TypesafeException.fromResponse(529, List("Retry-After" -> "2"), "busy")
+    val program                                                =
+      for {
+        named   <- RetryLoopDriver.run(policy(prefer = true, None))(_ => failure)
+        derived <- RetryLoopDriver.run(policy(prefer = false, None))(_ => failure)
+        bounded <- RetryLoopDriver.run(policy(prefer = true, Some(1.second)))(_ => failure)
+      } yield {
+        assertEquals(named.waitsBegun, List(2.seconds), "the period the overloaded service named was not waited")
+        assertEquals(named.attempts, 2)
+        assertEquals(derived.waitsBegun, List(1.second), "the derived wait was not used when the preference is off")
+        assertEquals(bounded.waitsBegun, Nil, "a named wait that would reach the bound must not be begun")
+        assertEquals(bounded.outcome, Failure(failure))
+      }
+    program.unsafeRun
   }
 
   // --------------------------------------------------------------------------

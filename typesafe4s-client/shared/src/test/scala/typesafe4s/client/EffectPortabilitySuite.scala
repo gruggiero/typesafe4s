@@ -157,7 +157,7 @@ final class EffectPortabilitySuite extends FunSuite {
   // (carrier level). A failure mid-pipeline reaches the caller as a member
   // of the closed family — here the service's own refusal, unaltered.
   test("a-failure-reaches-the-caller-as-a-family-member") {
-    val member  = Overloaded(RequestId.fromHeader("req-x"), "overloaded")
+    val member  = Overloaded(RequestId.fromHeader("req-x"), None, "overloaded")
     val program =
       for {
         clock     <- ManualClock.init

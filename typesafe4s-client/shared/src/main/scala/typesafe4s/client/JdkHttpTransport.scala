@@ -1,11 +1,13 @@
 package typesafe4s.client
 
-import java.net.URI
+import java.net.{Authenticator, ProxySelector, URI}
 import java.net.http.{HttpClient, HttpRequest as JdkRequest, HttpResponse as JdkResponse}
 import java.nio.charset.StandardCharsets.UTF_8
-import java.util.concurrent.{CompletionException, ExecutionException}
+import java.util.concurrent.{CompletionException, ExecutionException, Executor}
 
+import scala.concurrent.duration.FiniteDuration
 import scala.jdk.CollectionConverters.*
+import scala.jdk.DurationConverters.*
 
 import kyo.compat.*
 
@@ -23,8 +25,59 @@ object JdkHttpTransport {
     * `release` closes the client it built (spec: client-configuration —
     * a client releases what it holds).
     */
-  def apply(): Transport = {
-    val client = HttpClient.newHttpClient()
+  def apply(): Transport = owned(HttpClient.newHttpClient())
+
+  /**
+    * A transport on an `HttpClient` the SDK builds from these settings (#30)
+    * — OWNED like the default: its `release` closes the client. Every
+    * setting is optional; one left out keeps the JDK's default, so
+    * `configured()` behaves like `apply()`.
+    *
+    *   - `connectTimeout`: how long establishing a connection may take. It
+    *     is separate from the per-attempt allowance, which bounds the whole
+    *     exchange and stays the pipeline's job.
+    *   - `proxy`: for example `ProxySelector.of(InetSocketAddress("proxy.corp", 3128))`,
+    *     or `ProxySelector.getDefault` to follow the `https.proxyHost` system
+    *     properties.
+    *   - `authenticator`: credentials for a proxy that asks for them.
+    *   - `version`: `HttpClient.Version.HTTP_1_1` for a proxy or gateway
+    *     that mishandles HTTP/2; the JDK's default prefers HTTP/2.
+    *   - `executor`: runs the client's asynchronous work, for example a
+    *     virtual-thread executor.
+    *
+    * For anything else the JDK builder offers, build the client yourself
+    * and use `withClient`.
+    */
+  def configured(
+    connectTimeout: Option[FiniteDuration] = None,
+    proxy: Option[ProxySelector] = None,
+    authenticator: Option[Authenticator] = None,
+    version: Option[HttpClient.Version] = None,
+    executor: Option[Executor] = None
+  ): Transport =
+    owned(build(connectTimeout, proxy, authenticator, version, executor))
+
+  // `private[client]` — the oracle inspects the built client's settings
+  private[client] def build(
+    connectTimeout: Option[FiniteDuration],
+    proxy: Option[ProxySelector],
+    authenticator: Option[Authenticator],
+    version: Option[HttpClient.Version],
+    executor: Option[Executor]
+  ): HttpClient = {
+    // the JDK builder refuses a non-positive timeout with a bare
+    // IllegalArgumentException; the precondition names the setting
+    require(connectTimeout.forall(_.toNanos > 0), "a connect timeout must be positive")
+    val builder = HttpClient.newBuilder()
+    connectTimeout.foreach(t => builder.connectTimeout(t.toJava))
+    proxy.foreach(builder.proxy)
+    authenticator.foreach(builder.authenticator)
+    version.foreach(builder.version)
+    executor.foreach(builder.executor)
+    builder.build()
+  }
+
+  private def owned(client: HttpClient): Transport =
     new Transport {
       def exchange(request: HttpRequest): CIO[HttpResponse] = send(client, request)
 
@@ -32,7 +85,6 @@ object JdkHttpTransport {
       // down; an exchange attempted afterwards fails at sendAsync
       override def release: CIO[Unit] = CIO.defer(client.close())
     }
-  }
 
   /**
     * A transport on a caller-configured client — proxies, authenticators

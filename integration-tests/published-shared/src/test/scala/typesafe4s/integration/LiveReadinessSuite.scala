@@ -69,7 +69,7 @@ final class LiveReadinessSuite extends FunSuite {
     LiveGate.config { k => consulted += k; None }
     assert(
       consulted.toSet.subsetOf(
-        Set(TypesafeConfig.apiKeyEnv, TypesafeConfig.baseUrlEnv, TypesafeConfig.modelEnv, TypesafeConfig.logLevelEnv)
+        Set(TypesafeConfig.apiKeyEnv, TypesafeConfig.baseUrlEnv, TypesafeConfig.modelEnv, TypesafeConfig.logLevelEnv, TypesafeConfig.timeoutEnv)
       ),
       s"the gate consulted undocumented variables: ${consulted.toSet}"
     )
