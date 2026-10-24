@@ -21,7 +21,9 @@ final case class TypesafeConfig(
   allowance: FiniteDuration,
   retryPolicy: RetryPolicy,
   headers: List[(String, String)],
-  logLevel: LogLevel
+  logLevel: LogLevel,
+  // #49: answer repeated systemOne calls from a cache; None always asks the service
+  cache: Option[ResponseCache] = None
 ) {
 
   /**

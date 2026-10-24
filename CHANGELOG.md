@@ -12,6 +12,11 @@ one of: Added, Changed, Deprecated, Removed, Fixed, Security. At a release, the 
 
 ## [Unreleased]
 
+### Added
+
+- An opt-in `ResponseCache` on `TypesafeConfig` answers a repeated `systemOne` call (same model, state and
+  questions) without a request. `ResponseCache.inMemory(maxEntries, ttl)` is included; errors are never cached (#49).
+
 ## [0.1.0] - 2026-09-19
 
 First release. A Scala 3 SDK for the TypeSafe System One API (`jev` models): send a state and
