@@ -34,9 +34,23 @@ private[typesafe4s] object Exchange {
     transport: Transport,
     policy: RetryPolicy,
     clock: Clock,
-    allowance: FiniteDuration
+    allowance: FiniteDuration,
+    permits: Option[Permits] = None
   )(request: HttpRequest): CIO[HttpResponse] =
-    Retry.run(policy, clock)(attempt(transport, clock, allowance)(request))
+    permits match {
+      case None          => Retry.run(policy, clock)(attempt(transport, clock, allowance)(request))
+      case Some(permits) =>
+        // #48: every attempt takes a permit before it is sent. The wait for
+        // one counts against the total bound, anchored like Retry's own.
+        policy.totalBound.fold(CIO.value(Option.empty[FiniteDuration]))(bound => clock.monotonic.map(start => Some(start + bound))).flatMap {
+          deadline =>
+            val paced = permits.acquire(clock, deadline).flatMap {
+              case true  => attempt(transport, clock, allowance)(request)
+              case false => CIO.fail(Timeout(policy.totalBound.getOrElse(allowance)))
+            }
+            Retry.run(policy, clock)(paced)
+        }
+    }
 
   /**
     * One attempt: the exchange raced against `clock.sleep(allowance)` —

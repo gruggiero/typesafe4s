@@ -17,7 +17,8 @@ private[typesafe4s] object Ask {
   def run[A](
     config: TypesafeConfig,
     transport: Transport,
-    clock: Clock
+    clock: Clock,
+    permits: Option[Permits] = None
   )(
     state: A,
     questions: QuestionSet
@@ -30,7 +31,7 @@ private[typesafe4s] object Ask {
       configured = UserAgent.withSdk(config.headers)
     )
     Exchange
-      .run(transport, config.retryPolicy, clock, config.allowance)(request)
+      .run(transport, config.retryPolicy, clock, config.allowance, permits)(request)
       .flatMap { response =>
         val rid = Exchange
           .requestId(response)

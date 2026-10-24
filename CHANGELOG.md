@@ -12,6 +12,11 @@ one of: Added, Changed, Deprecated, Removed, Fixed, Security. At a release, the 
 
 ## [Unreleased]
 
+### Added
+
+- `TypesafeConfig.rateLimit` caps a client's request rate (`RequestRateLimit(perSecond, burst)`). Every attempt
+  takes a permit, and waiting for one counts against the retry policy's total bound. It is off by default (#48).
+
 ## [0.1.0] - 2026-09-19
 
 First release. A Scala 3 SDK for the TypeSafe System One API (`jev` models): send a state and
