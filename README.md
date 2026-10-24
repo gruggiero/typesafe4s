@@ -44,6 +44,45 @@ Optional JSON adapters — each pulls in exactly its own library and nothing els
 "io.github.gruggiero" %% "typesafe4s-upickle"  % "0.1.0"  // uPickle
 ```
 
+### Other build tools
+
+The artifacts are Scala 3 libraries, so outside sbt the name carries the `_3` suffix (sbt's `%%`
+adds it for you). Swap `-zio` for `-ce`, `-ox`, `-kyo` or `-pekko` to pick your backend; the JSON
+adapters follow the same pattern (`typesafe4s-circe_3` and so on).
+
+Maven:
+
+```xml
+<dependency>
+  <groupId>io.github.gruggiero</groupId>
+  <artifactId>typesafe4s-client-zio_3</artifactId>
+  <version>0.1.0</version>
+</dependency>
+```
+
+Gradle (Kotlin DSL; the Groovy DSL takes the same string):
+
+```kotlin
+implementation("io.github.gruggiero:typesafe4s-client-zio_3:0.1.0")
+```
+
+Mill (1.x; 0.12 and earlier spell it `ivy"..."`):
+
+```scala
+def mvnDeps = Seq(mvn"io.github.gruggiero::typesafe4s-client-zio:0.1.0")
+```
+
+scala-cli, in a source file:
+
+```scala
+//> using dep io.github.gruggiero::typesafe4s-client-zio:0.1.0
+```
+
+To try the SDK in one file with no build, run
+[`examples/scala-cli/quickstart.scala`](examples/scala-cli/quickstart.scala):
+`scala-cli run examples/scala-cli/quickstart.scala`. Without `TYPESAFE_API_KEY` it answers from a
+canned response, so it runs anywhere.
+
 From the next release, `typesafe4s-play-json` adds the same adapter for
 [play-json](https://github.com/playframework/play-json), for Play Framework applications
 (`import typesafe4s.playjson.JsonEntry`).
