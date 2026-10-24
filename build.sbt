@@ -548,9 +548,10 @@ lazy val client = (projectMatrix in file("typesafe4s-client"))
     // compatLibrary emits an implicit Future anchor row; it is a compile-only baseline, never published.
     // The 3.9.0 cells never publish either — the `_3` suffix collides with the published 3.8.4 cells.
     publish / skip   := moduleName.value.endsWith("-future") || skipNon38Publish.value,
-    // the SDK reports its own version in the User-Agent header; moduleName identifies the backend row
-    // ("typesafe4s-client-pekko" etc.) so shared parity suites can assert per-row declared divergence
-    buildInfoKeys    := Seq[BuildInfoKey](version, moduleName),
+    // the SDK reports its own version, backend and Scala version in the User-Agent header (#21); moduleName
+    // identifies the backend row ("typesafe4s-client-pekko" etc.), so shared parity suites can also assert
+    // per-row declared divergence
+    buildInfoKeys    := Seq[BuildInfoKey](version, moduleName, scalaVersion),
     buildInfoPackage := "typesafe4s.client",
     // pin the backend effect libs per cell rather than inheriting them transitively from kyo-compat-<backend>
     libraryDependencies ++= {

@@ -46,7 +46,7 @@ final class RetryParitySuite extends FunSuite {
     "NotFound"            -> NotFound(rid, "unknown"),
     "UnprocessableEntity" -> UnprocessableEntity(rid, "unprocessable"),
     "RateLimit"           -> RateLimit(rid, Some(3.seconds), "too many"),
-    "Overloaded"          -> Overloaded(rid, "overloaded"),
+    "Overloaded"          -> Overloaded(rid, None, "overloaded"),
     "InternalServer/408"  -> InternalServer(408, rid, "slow"),
     "InternalServer/503"  -> InternalServer(503, rid, "fault"),
     "InternalServer/451"  -> InternalServer(451, rid, "legal"),
