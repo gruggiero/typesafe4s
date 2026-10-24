@@ -49,6 +49,7 @@ jobs:
           - { row: jsonZio, goal: "+jsonZio/test" }
           - { row: jsonJsoniter, goal: "+jsonJsoniter/test" }
           - { row: jsonUpickle, goal: "+jsonUpickle/test" }
+          - { row: jsonPlay, goal: "+jsonPlay/test" }
           - { row: examplesZio, goal: "examplesZio3_8_4/compile; examplesZio3_9_0/compile" }
           - { row: examplesCe, goal: "examplesCe3_8_4/compile; examplesCe3_9_0/compile" }
           - { row: examplesOx, goal: "examplesOx3_8_4/compile; examplesOx3_9_0/compile" }

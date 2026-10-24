@@ -40,6 +40,7 @@ val circeVersion    = "0.14.15"
 val zioJsonVersion  = "0.7.44"
 val jsoniterVersion = "2.36.7"
 val upickleVersion  = "4.3.2"
+val playJsonVersion = "3.0.6"
 
 // The Pekko backend uses the Future compatibility cell (`kyo-compat-future`) with Pekko Streams. A separate axis name prevents it from
 // being deduplicated with the implicit Future anchor. The explicit coordinates make its rows resolve `kyo-compat-future`; the plugin
@@ -200,7 +201,8 @@ checkPublicationContract := {
     "jsonCirce"    -> skipOf("jsonCirce"),
     "jsonZio"      -> skipOf("jsonZio"),
     "jsonJsoniter" -> skipOf("jsonJsoniter"),
-    "jsonUpickle"  -> skipOf("jsonUpickle")
+    "jsonUpickle"  -> skipOf("jsonUpickle"),
+    "jsonPlay"     -> skipOf("jsonPlay")
   )
   adapterSkips.foreach { case (p, skip) =>
     assert(!skip, s"$p is marked publish/skip — every adapter must publish")
@@ -219,7 +221,7 @@ checkPublicationContract := {
   nonPublished.foreach { case (p, skip) =>
     assert(
       skip,
-      s"$p is publishable — only the core, the five client rows, the four adapters and compat-ce may publish"
+      s"$p is publishable — only the core, the five client rows, the five adapters and compat-ce may publish"
     )
   }
 }
@@ -267,14 +269,17 @@ checkAdapterDependencies := {
   val zioDeps          = (LocalProject("jsonZio") / Compile / externalDependencyClasspath).value
   val jsoniterDeps     = (LocalProject("jsonJsoniter") / Compile / externalDependencyClasspath).value
   val upickleDeps      = (LocalProject("jsonUpickle") / Compile / externalDependencyClasspath).value
+  val playDeps         = (LocalProject("jsonPlay") / Compile / externalDependencyClasspath).value
   val circeTestDeps    = (LocalProject("jsonCirce") / Test / externalDependencyClasspath).value
   val zioTestDeps      = (LocalProject("jsonZio") / Test / externalDependencyClasspath).value
   val jsoniterTestDeps = (LocalProject("jsonJsoniter") / Test / externalDependencyClasspath).value
   val upickleTestDeps  = (LocalProject("jsonUpickle") / Test / externalDependencyClasspath).value
+  val playTestDeps     = (LocalProject("jsonPlay") / Test / externalDependencyClasspath).value
   val circeDecl        = (LocalProject("jsonCirce") / libraryDependencies).value
   val zioDecl          = (LocalProject("jsonZio") / libraryDependencies).value
   val jsoniterDecl     = (LocalProject("jsonJsoniter") / libraryDependencies).value
   val upickleDecl      = (LocalProject("jsonUpickle") / libraryDependencies).value
+  val playDecl         = (LocalProject("jsonPlay") / libraryDependencies).value
 
   // resolved artifacts carry the cross suffix (circe-core_3); match on the
   // binary-name prefix so the check is cross-version agnostic. A jar with no
@@ -298,7 +303,8 @@ checkAdapterDependencies := {
     "io.circe:circe-core",
     "dev.zio:zio-json",
     "com.github.plokhotnyuk.jsoniter-scala:jsoniter-scala-core",
-    "com.lihaoyi:ujson"
+    "com.lihaoyi:ujson",
+    "org.playframework:play-json"
   )
   // test frameworks are the only other dependencies an adapter may declare,
   // and only in the Test configuration
@@ -308,7 +314,8 @@ checkAdapterDependencies := {
     ("jsonCirce", libraries(0), resolved(circeDeps) ++ resolved(circeTestDeps), circeDecl),
     ("jsonZio", libraries(1), resolved(zioDeps) ++ resolved(zioTestDeps), zioDecl),
     ("jsonJsoniter", libraries(2), resolved(jsoniterDeps) ++ resolved(jsoniterTestDeps), jsoniterDecl),
-    ("jsonUpickle", libraries(3), resolved(upickleDeps) ++ resolved(upickleTestDeps), upickleDecl)
+    ("jsonUpickle", libraries(3), resolved(upickleDeps) ++ resolved(upickleTestDeps), upickleDecl),
+    ("jsonPlay", libraries(4), resolved(playDeps) ++ resolved(playTestDeps), playDecl)
   )
   adapters.foreach { case (proj, own, deps, decl) =>
     assert(
@@ -397,6 +404,7 @@ checkReleaseReadiness := {
     "jsonZio",
     "jsonJsoniter",
     "jsonUpickle",
+    "jsonPlay",
     "parityAll",
     "sbt check" // distinctive — bare "check" is satisfied by actions/checkout (Ring-8 F5)
   ).++(
@@ -435,7 +443,7 @@ addCommandAlias(
     "clientFuture3_8_4/Test/compile clientFuture3_9_0/Test/compile " +
     "integrationTestsFuture3_8_4/Test/compile integrationTestsFuture3_9_0/Test/compile; " +
     // adapters are plain projects — `+` iterates their crossScalaVersions (both minors)
-    "+jsonCirce/test; +jsonZio/test; +jsonJsoniter/test; +jsonUpickle/test; " +
+    "+jsonCirce/test; +jsonZio/test; +jsonJsoniter/test; +jsonUpickle/test; +jsonPlay/test; " +
     // The conformance suite has wall-clock parallelism checks. Run it after the parallel block so forked test cells do not starve it.
     "ceConformanceCe3_8_4/test; ceConformanceCe3_9_0/test"
 )
@@ -459,7 +467,7 @@ lazy val root = project
   .settings(publish / skip := true)
   .aggregate(
     core.projectRefs ++ client.projectRefs ++ integrationTests.projectRefs ++ examples.projectRefs ++
-      Seq[ProjectReference](compatCe, jsonCirce, jsonZio, jsonJsoniter, jsonUpickle): _*
+      Seq[ProjectReference](compatCe, jsonCirce, jsonZio, jsonJsoniter, jsonUpickle, jsonPlay): _*
   )
 
 // Pure sans-IO core: JSON AST and codecs, the question/answer model, the wire contract, the error algebra. Zero external dependencies.
@@ -521,6 +529,15 @@ lazy val jsonUpickle = project
   .dependsOn(LocalProject("core") % "compile->compile;test->test")
   .settings(libraryDependencies += "com.lihaoyi" %% "ujson" % upickleVersion)
 
+// play-json (#32), for Play Framework applications. Its package is `typesafe4s.playjson`: a
+// `typesafe4s.play` package would shadow the root `play` package inside the SDK's own sources.
+lazy val jsonPlay = project
+  .in(file("typesafe4s-json-play"))
+  .settings(name := "typesafe4s-play-json")
+  .settings(commonSettings)
+  .dependsOn(LocalProject("core") % "compile->compile;test->test")
+  .settings(libraryDependencies += "org.playframework" %% "play-json" % playJsonVersion)
+
 // The Cats Effect binding of the `kyo.compat` package, vendored because Kyo removed it upstream; `typesafe4s-compat-ce/README.md`
 // records the provenance. The `ce` cells of every matrix bind to this project through `bindLocally`.
 lazy val compatCe = project
@@ -557,9 +574,10 @@ lazy val client = (projectMatrix in file("typesafe4s-client"))
     // compatLibrary emits an implicit Future anchor row; it is a compile-only baseline, never published.
     // The 3.9.0 cells never publish either — the `_3` suffix collides with the published 3.8.4 cells.
     publish / skip   := moduleName.value.endsWith("-future") || skipNon38Publish.value,
-    // the SDK reports its own version in the User-Agent header; moduleName identifies the backend row
-    // ("typesafe4s-client-pekko" etc.) so shared parity suites can assert per-row declared divergence
-    buildInfoKeys    := Seq[BuildInfoKey](version, moduleName),
+    // the SDK reports its own version, backend and Scala version in the User-Agent header (#21); moduleName
+    // identifies the backend row ("typesafe4s-client-pekko" etc.), so shared parity suites can also assert
+    // per-row declared divergence
+    buildInfoKeys    := Seq[BuildInfoKey](version, moduleName, scalaVersion),
     buildInfoPackage := "typesafe4s.client",
     // pin the backend effect libs per cell rather than inheriting them transitively from kyo-compat-<backend>
     libraryDependencies ++= {

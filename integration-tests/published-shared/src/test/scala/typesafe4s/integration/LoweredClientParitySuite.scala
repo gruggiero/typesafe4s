@@ -47,7 +47,7 @@ final class LoweredClientParitySuite extends ScalaCheckSuite {
     NotFound(rid, "unknown"),
     UnprocessableEntity(rid, "unprocessable"),
     RateLimit(rid, Some(3.seconds), "too many"),
-    Overloaded(rid, "overloaded"),
+    Overloaded(rid, None, "overloaded"),
     InternalServer(503, rid, "service fault"),
     ResponseValidation(rid, "answers.q", "wrong shape"),
     ConnectionFailed(new java.io.IOException("refused")),
@@ -130,7 +130,7 @@ final class LoweredClientParitySuite extends ScalaCheckSuite {
   // through the ordinary failure channel — and on ALL of them it is a
   // member of the closed family.
   test("ordinary-failures-elsewhere") {
-    val member  = Overloaded(rid, "overloaded")
+    val member  = Overloaded(rid, None, "overloaded")
     val program =
       for {
         clock     <- ManualClock.init
