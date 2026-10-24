@@ -52,7 +52,7 @@ final class ScopedConstructionSuite extends FunSuite {
   }
 
   test("scoped-releases-on-failure") {
-    val member  = Overloaded(None, "overloaded")
+    val member  = Overloaded(None, None, "overloaded")
     val program =
       for {
         transport <- StandInTransport.init(Nil, Step.Answer(HttpResponse(200, Nil, "{}")))

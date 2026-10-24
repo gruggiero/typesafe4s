@@ -14,3 +14,42 @@ final case class Evaluation[A](
 ) {
   def map[B](f: A => B): Evaluation[B] = copy(answers = f(answers))
 }
+
+object Evaluation {
+
+  /**
+    * Merges the evaluations of one batched call (`systemOneBatched`) into
+    * the evaluation of the whole question set: the union of the answers,
+    * the summed usage, and the model that answered them.
+    *
+    * The request ID is kept only for a single evaluation — a merged result
+    * came from several exchanges, whose IDs stay on the inputs.
+    *
+    * Left is `InvalidQuestion` when there is nothing to combine, when a name
+    * is answered by more than one evaluation (never silently overwritten),
+    * or when the evaluations were answered by different models.
+    */
+  def combine(evaluations: Iterable[Evaluation[AnswerSet]]): Either[TypesafeException, Evaluation[AnswerSet]] =
+    evaluations.toList match {
+      case Nil                => Left(TypesafeException.InvalidQuestion(None, "there are no evaluations to combine"))
+      case single :: Nil      => Right(single)
+      case all @ (first :: _) =>
+        val models = all.map(_.model).distinct
+        if (models.size > 1)
+          Left(TypesafeException.InvalidQuestion(None, s"the evaluations were answered by different models: ${models.mkString(", ")}"))
+        else {
+          val merged = all.foldLeft[Either[TypesafeException, Map[String, Answer]]](Right(Map.empty)) { (acc, e) =>
+            acc.flatMap { answers =>
+              e.answers.answers.keys.find(answers.contains) match {
+                case Some(name) => Left(TypesafeException.InvalidQuestion(Some(name), "answered by more than one evaluation"))
+                case None       => Right(answers ++ e.answers.answers)
+              }
+            }
+          }
+          merged.map { answers =>
+            val usage = all.map(_.usage).foldLeft(Usage.empty)(_ + _)
+            Evaluation(AnswerSet(answers, first.model, usage, None), first.model, usage, None)
+          }
+        }
+    }
+}

@@ -8,7 +8,20 @@ import scala.util.{Failure, Success}
 import kyo.compat.*
 import munit.FunSuite
 
-import typesafe4s.{AnswerSet, ApiKey, ConcurrencyBound, Evaluation, HttpResponse, Question, QuestionSet, RetryPolicy, TokenBudget, TypesafeException}
+import typesafe4s.{
+  AnswerSet,
+  ApiKey,
+  ConcurrencyBound,
+  Evaluation,
+  HttpResponse,
+  Question,
+  QuestionSet,
+  RetryPolicy,
+  SystemOne,
+  TokenBudget,
+  TypesafeException,
+  Usage
+}
 import typesafe4s.client.internal.{BatchRun, BatchSetups, ClientCio, ManualClock, StandInTransport}
 import typesafe4s.client.internal.StandInTransport.Step
 
@@ -371,6 +384,33 @@ final class QuestionBatchingSuite extends FunSuite {
         assert(failure.isEmpty, s"drain failed: $failure")
         assertEquals(begun, 2, "the batch's retry never re-attempted")
         assertEquals(evals.size, 1)
+      }
+    program.unsafeRun
+  }
+
+  // --------------------------------------------------------------------------
+  // Evaluation.combine over a split call: the merged batches carry the same
+  // answers one unsplit decoding of the response gives, and their usage sums.
+  // --------------------------------------------------------------------------
+  test("combined-batches-equal-the-unsplit-answers") {
+    val qs      = eachAlone(3)
+    val names   = qs.names.mkString(",")
+    val body    = okCovering(qs).body.dropRight(1) + ""","usage":{"input_tokens":10,"output_tokens":2}}"""
+    val program =
+      for {
+        clock            <- ManualClock.init
+        transport        <- StandInTransport.init(Nil, Step.Answer(HttpResponse(200, Nil, body)))
+        client            = new ClientCio(config, transport, clock)
+        batchRun         <- client.askBatched(state, Right(qs), ConcurrencyBound(3))
+        (evals, failure) <- drain(batchRun)
+      } yield {
+        assert(failure.isEmpty, s"drain failed: $failure")
+        assertEquals(evals.size, 3, s"expected one evaluation per question of $names")
+        val unsplit  = SystemOne.decodeResponse(qs, None, body).map(_.answers)
+        val combined = Evaluation.combine(evals)
+        assertEquals(combined.map(_.answers.answers), unsplit)
+        assertEquals(combined.map(_.usage), Right(Usage(Some(30L), Some(6L))))
+        assertEquals(combined.map(_.model), Right("test-model"))
       }
     program.unsafeRun
   }

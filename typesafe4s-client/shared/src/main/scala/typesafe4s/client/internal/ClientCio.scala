@@ -79,7 +79,7 @@ final private[typesafe4s] class ClientCio(
       s"${config.baseUrl}/v1/models",
       None,
       config.apiKey,
-      configured = config.headers
+      configured = UserAgent.withSdk(config.headers)
     )
     Exchange
       .run(transport, config.retryPolicy, clock, config.allowance)(request)

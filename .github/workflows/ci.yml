@@ -49,6 +49,7 @@ jobs:
           - { row: jsonZio, goal: "+jsonZio/test" }
           - { row: jsonJsoniter, goal: "+jsonJsoniter/test" }
           - { row: jsonUpickle, goal: "+jsonUpickle/test" }
+          - { row: jsonPlay, goal: "+jsonPlay/test" }
           - { row: examplesZio, goal: "examplesZio3_8_4/compile; examplesZio3_9_0/compile" }
           - { row: examplesCe, goal: "examplesCe3_8_4/compile; examplesCe3_9_0/compile" }
           - { row: examplesOx, goal: "examplesOx3_8_4/compile; examplesOx3_9_0/compile" }
@@ -63,6 +64,20 @@ jobs:
           java-version: "25"
       - uses: sbt/setup-sbt@v1
       - run: sbt "${{ matrix.goal }}"
+
+  scala-cli:
+    # the one-file example depends on the PUBLISHED artifact: this proves the
+    # README's coordinates resolve and the example runs offline (#53)
+    name: scala-cli example
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+      - uses: VirtusLab/scala-cli-setup@v1
+      - run: scala-cli run examples/scala-cli/quickstart.scala --server=false
 
   parity:
     name: cross-backend parity

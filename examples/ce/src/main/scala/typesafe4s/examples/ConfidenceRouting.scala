@@ -14,11 +14,11 @@ object ConfidenceRouting extends IOApp.Simple {
       TypesafeClient.resource(config, transport).use { client =>
         client.systemOneDynamic(Demo.state)(Demo.questions).flatMap { eval =>
           val decision = eval.answers.answers.get("route") match {
-            case Some(a: ChoiceAnswer[?]) if a.confidence >= 0.8 =>
+            case Some(a: ChoiceAnswer[?]) if a.confidentAt(0.8).isDefined =>
               s"confident (${a.confidence}) — auto-executing '${a.choice}'"
-            case Some(a: ChoiceAnswer[?])                        =>
+            case Some(a: ChoiceAnswer[?])                                 =>
               s"low confidence (${a.confidence}) — escalating to a human"
-            case _                                               => "no routing answer returned — escalating"
+            case _                                                        => "no routing answer returned — escalating"
           }
           IO.println(decision)
         }

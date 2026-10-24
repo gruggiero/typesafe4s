@@ -1,0 +1,47 @@
+# API documentation (#34): builds the Scaladoc site of the published modules
+# (`sbt docSite`) and deploys it to GitHub Pages, on each release tag and on
+# main. One-time setup: Settings -> Pages -> Source: "GitHub Actions".
+name: API docs
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  workflow_dispatch:
+
+# one deployment at a time; a newer push supersedes a queued one
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # sbt-dynver: the site shows the version from git tags
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "25"
+      - uses: sbt/setup-sbt@v1
+      - run: sbt docSite
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: target/site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
