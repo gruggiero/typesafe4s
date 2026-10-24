@@ -34,6 +34,9 @@ trait BatchedClient[F[_], S[_]] extends Client[F] {
   // the per-row seam — same convention as askDynamic/askTyped: takes the
   // pre-validated set as an Either so a locally-invalid set fails before
   // any request is formed.
+  // a model view keeps the batched surface (#25)
+  def withModel(model: String): BatchedClient[F, S]
+
   def batched[A](
     state: A,
     questions: Either[TypesafeException.InvalidQuestion, QuestionSet],

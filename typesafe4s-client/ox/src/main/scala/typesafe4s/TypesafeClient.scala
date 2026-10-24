@@ -5,6 +5,7 @@ import ox.Ox
 import ox.flow.Flow
 
 import typesafe4s.client.{ApiSurface, BatchedClient, Client, LoweredClient, Transport, TypesafeConfig}
+import typesafe4s.client.internal.ClientCio
 
 // ============================================================================
 // spec: effect-portability — the Ox facade. The Ox effect is context-passed:
@@ -24,9 +25,15 @@ object TypesafeClient extends ApiSurface[[A] =>> Ox ?=> A] {
     of(config, Transport.default)
 
   def of(config: TypesafeConfig, transport: Transport): TypesafeClient =
-    new LoweredClient[[A] =>> Ox ?=> A](Client.cio(config, transport)) with BatchedClient[[A] =>> Ox ?=> A, [A] =>> Ox ?=> Flow[A]] {
+    wrap(Client.cio(config, transport))
+
+  // the facade over one carrier client; a model view (#25) is the same facade over the view
+  private def wrap(cio: ClientCio): TypesafeClient =
+    new LoweredClient[[A] =>> Ox ?=> A](cio) with BatchedClient[[A] =>> Ox ?=> A, [A] =>> Ox ?=> Flow[A]] {
       protected def lower[A](carried: CIO[A]): Ox ?=> A = TypesafeClient.lower(carried)
       protected def lift[A](fa: Ox ?=> A): CIO[A]       = TypesafeClient.lift(fa)
+
+      override def withModel(model: String): TypesafeClient = wrap(cio.withModel(model))
 
       def batched[A](
         state: A,
