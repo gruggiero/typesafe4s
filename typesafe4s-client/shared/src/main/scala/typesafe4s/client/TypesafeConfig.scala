@@ -21,7 +21,9 @@ final case class TypesafeConfig(
   allowance: FiniteDuration,
   retryPolicy: RetryPolicy,
   headers: List[(String, String)],
-  logLevel: LogLevel
+  logLevel: LogLevel,
+  // #48: a cap on this client's request rate; None sends without one
+  rateLimit: Option[RequestRateLimit] = None
 ) {
 
   /**

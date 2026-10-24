@@ -51,14 +51,15 @@ private[typesafe4s] object BatchRun {
     config: TypesafeConfig,
     transport: Transport,
     clock: Clock,
-    concurrency: ConcurrencyBound
+    concurrency: ConcurrencyBound,
+    permits: Option[Permits] = None
   )(state: A, questions: Either[TypesafeException.InvalidQuestion, QuestionSet])(using enc: StateEncoder[A]): CIO[BatchRun] =
     questions match {
       case Left(e)   => CIO.fail(e)
       case Right(qs) =>
         TokenBudget.split(state, qs) match {
           case Left(e)        => CIO.fail(e)
-          case Right(batches) => spawn(config, transport, clock, concurrency, state, batches)
+          case Right(batches) => spawn(config, transport, clock, permits, concurrency, state, batches)
         }
     }
 
@@ -66,6 +67,7 @@ private[typesafe4s] object BatchRun {
     config: TypesafeConfig,
     transport: Transport,
     clock: Clock,
+    permits: Option[Permits],
     concurrency: ConcurrencyBound,
     state: A,
     batches: List[typesafe4s.Batch]
@@ -79,7 +81,7 @@ private[typesafe4s] object BatchRun {
       meter     <- CMeter.init(concurrency.value)
       remaining <- CAtomicInt.init(batches.size)
       _         <- CIO.foreachDiscard(batches) { batch =>
-                     CFiber.init(worker(config, transport, clock, state, batch, meter, abandoned, signal, results)).unit
+                     CFiber.init(worker(config, transport, clock, permits, state, batch, meter, abandoned, signal, results)).unit
                    }
     } yield new Session(remaining, results, abandoned, signal)
 
@@ -117,6 +119,7 @@ private[typesafe4s] object BatchRun {
     config: TypesafeConfig,
     transport: Transport,
     clock: Clock,
+    permits: Option[Permits],
     state: A,
     batch: typesafe4s.Batch,
     meter: CMeter,
@@ -130,7 +133,7 @@ private[typesafe4s] object BatchRun {
         else
           CIO
             .race(
-              Ask.run(config, transport, clock)(state, batch.questions).liftToTry.map(t => t.map(Some(_))),
+              Ask.run(config, transport, clock, permits)(state, batch.questions).liftToTry.map(t => t.map(Some(_))),
               signal.get.map(_ => Success(Option.empty[Evaluation[AnswerSet]]))
             )
             .flatMap(results.put)
