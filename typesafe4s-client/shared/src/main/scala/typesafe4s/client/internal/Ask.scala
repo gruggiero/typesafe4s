@@ -1,9 +1,11 @@
 package typesafe4s.client.internal
 
+import scala.util.Try
+
 import kyo.compat.*
 
 import typesafe4s.{AnswerSet, Evaluation, HttpMethod, HttpRequest, QuestionSet, RequestId, StateEncoder, SystemOne}
-import typesafe4s.client.{Transport, TypesafeConfig}
+import typesafe4s.client.{ResponseCache, Transport, TypesafeConfig}
 import typesafe4s.json.Json
 
 // ============================================================================
@@ -22,14 +24,15 @@ private[typesafe4s] object Ask {
     state: A,
     questions: QuestionSet
   )(using enc: StateEncoder[A]): CIO[Evaluation[AnswerSet]] = {
+    val body    = Json.render(SystemOne.renderRequest(state, config.model, questions))
     val request = HttpRequest.exchange(
       HttpMethod.Post,
       s"${config.baseUrl}/v1/systemone",
-      Some(Json.render(SystemOne.renderRequest(state, config.model, questions))),
+      Some(body),
       config.apiKey,
       configured = UserAgent.withSdk(config.headers)
     )
-    Exchange
+    val asked   = Exchange
       .run(transport, config.retryPolicy, clock, config.allowance)(request)
       .flatMap { response =>
         val rid = Exchange
@@ -46,5 +49,16 @@ private[typesafe4s] object Ask {
             set => CIO.value(Evaluation(set, set.model, set.usage, set.requestId))
           )
       }
+    // #49: a hit makes no request; only a success is stored; a cache that
+    // throws is a miss and never fails the call
+    config.cache match {
+      case None        => asked
+      case Some(cache) =>
+        val key = ResponseCache.key(request.target, body)
+        CIO.defer(Try(cache.get(key)).toOption.flatten).flatMap {
+          case Some(hit) => CIO.value(hit)
+          case None      => asked.flatMap(evaluation => CIO.defer(Try(cache.put(key, evaluation))).map(_ => evaluation))
+        }
+    }
   }
 }
