@@ -205,6 +205,10 @@ Formats; `sbt check` verifies formatting without writing.
 | `integration-tests` | — | One parity suite, recompiled and run on every row. |
 | `examples` | — | Per-row runnable examples; compiled in CI so they cannot rot. |
 
+## Security
+
+Please report vulnerabilities privately, as described in [SECURITY.md](SECURITY.md), not in a public issue.
+
 ## Maintainers
 
 - **Kannupriya Kalra** (maintainer) - [@kannupriyakalra](https://github.com/kannupriyakalra) ·
