@@ -108,6 +108,7 @@ class ErrorModelProperties extends ScalaCheckSuite {
     case _: TypesafeException.MissingCredential    => "MissingCredential"
     case _: TypesafeException.InvalidQuestion      => "InvalidQuestion"
     case _: TypesafeException.InvalidConfiguration => "InvalidConfiguration"
+    case _: TypesafeException.CircuitOpen          => "CircuitOpen"
   }
 
   private val allMembers: List[TypesafeException] = List(
@@ -125,7 +126,8 @@ class ErrorModelProperties extends ScalaCheckSuite {
     TypesafeException.MissingAnswer("q1"),
     TypesafeException.MissingCredential("TYPESAFE_API_KEY"),
     TypesafeException.InvalidQuestion(Some("q1"), "d"),
-    TypesafeException.InvalidConfiguration("TYPESAFE_LOG_LEVEL", "d")
+    TypesafeException.InvalidConfiguration("TYPESAFE_LOG_LEVEL", "d"),
+    TypesafeException.CircuitOpen(5.seconds)
   )
 
   test("distinguishing every member suffices") {
@@ -135,7 +137,9 @@ class ErrorModelProperties extends ScalaCheckSuite {
     // spec: client-configuration — InvalidConfiguration joined the family
     // (an unusable environment value fails resolution naming the variable):
     // 14 -> 15
-    assertEquals(allMembers.map(memberName).distinct.size, 15)
+    // #50 — CircuitOpen joined the family (the client's breaker refused the
+    // call without a request): 15 -> 16
+    assertEquals(allMembers.map(memberName).distinct.size, 16)
   }
 
   // spec: error-model — Scenario: A failure still behaves as an ordinary failure

@@ -34,9 +34,13 @@ private[typesafe4s] object Exchange {
     transport: Transport,
     policy: RetryPolicy,
     clock: Clock,
-    allowance: FiniteDuration
-  )(request: HttpRequest): CIO[HttpResponse] =
-    Retry.run(policy, clock)(attempt(transport, clock, allowance)(request))
+    allowance: FiniteDuration,
+    breaker: Option[Breaker] = None
+  )(request: HttpRequest): CIO[HttpResponse] = {
+    val call = Retry.run(policy, clock)(attempt(transport, clock, allowance)(request))
+    // #50: the breaker sees the whole call, retries included
+    breaker.fold(call)(_.guard(clock, policy)(call))
+  }
 
   /**
     * One attempt: the exchange raced against `clock.sleep(allowance)` —

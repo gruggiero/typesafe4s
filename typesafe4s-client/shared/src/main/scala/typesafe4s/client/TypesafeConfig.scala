@@ -21,7 +21,9 @@ final case class TypesafeConfig(
   allowance: FiniteDuration,
   retryPolicy: RetryPolicy,
   headers: List[(String, String)],
-  logLevel: LogLevel
+  logLevel: LogLevel,
+  // #50: stop calling a failing service for a while; None never stops
+  circuitBreaker: Option[CircuitBreakerPolicy] = None
 ) {
 
   /**

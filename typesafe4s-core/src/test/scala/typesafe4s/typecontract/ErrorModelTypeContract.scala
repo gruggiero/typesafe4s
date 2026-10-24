@@ -64,6 +64,7 @@ private object ErrorModelTypeContract {
     case _: TypesafeException.MissingCredential    => "MissingCredential"
     case _: TypesafeException.InvalidQuestion      => "InvalidQuestion"
     case _: TypesafeException.InvalidConfiguration => "InvalidConfiguration"
+    case _: TypesafeException.CircuitOpen          => "CircuitOpen"
   }
 }
 
