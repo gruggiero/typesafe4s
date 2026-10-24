@@ -1,0 +1,31 @@
+# Creates the GitHub Release for a v* tag (#57), with notes generated from the
+# merged pull requests (categories in .github/release.yml) and a link to the
+# CHANGELOG. Publishing to Maven Central stays in ci.yml; a release that
+# already exists is left untouched.
+name: Release notes
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Create the GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+          REPO: ${{ github.repository }}
+        run: |
+          if gh release view "$TAG" --repo "$REPO" > /dev/null 2>&1; then
+            echo "Release $TAG already exists; leaving it as it is."
+            exit 0
+          fi
+          prerelease=()
+          case "$TAG" in *-*) prerelease=(--prerelease) ;; esac
+          gh release create "$TAG" --repo "$REPO" --verify-tag --generate-notes "${prerelease[@]}" \
+            --notes "See [CHANGELOG.md](https://github.com/$REPO/blob/$TAG/CHANGELOG.md) for the user-facing changes."

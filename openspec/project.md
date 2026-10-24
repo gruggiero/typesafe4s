@@ -21,7 +21,7 @@ typesafe4s-client (matrix: zio | ce | ox | kyo | pekko | future-anchor)
   → typesafe4s-core
   → typesafe4s-compat-ce            (ce row only, bindLocally)
 
-typesafe4s-circe / -zio-json / -jsoniter / -upickle
+typesafe4s-circe / -zio-json / -jsoniter / -upickle / -play-json
   → typesafe4s-core
 
 integration-tests (matrix, same rows)  → typesafe4s-client
@@ -39,14 +39,14 @@ examples          (matrix, same rows)  → typesafe4s-client
 - **typesafe4s-client** — the runtime, written once against `CIO`. `Transport` SPI,
   `JdkHttpTransport`, retry loop, `TypesafeConfig`, `Client[F]`, `LoweredClient[F]`, batching.
   Cross-published per backend; the `future` row is a compile-only anchor and is never published.
-- **typesafe4s-{circe,zio-json,jsoniter,upickle}** — optional one-given adapters supplying
+- **typesafe4s-{circe,zio-json,jsoniter,upickle,play-json}** — optional one-given adapters supplying
   `StateEncoder[A]` from that library's encoder. No JSON library is imposed on users.
 - **integration-tests** — one suite written against `CIO`, recompiled per backend row.
 - **examples** — runnable per backend.
 
 ## Published Artifacts
 
-`typesafe4s-core`, `typesafe4s-client-{zio,ce,ox,kyo,pekko}`, `typesafe4s-{circe,zio-json,jsoniter,upickle}`.
+`typesafe4s-core`, `typesafe4s-client-{zio,ce,ox,kyo,pekko}`, `typesafe4s-{circe,zio-json,jsoniter,upickle,play-json}`.
 
 GroupId note: **`com.typesafe` is not available** — it is Lightbend's long-standing groupId. Use
 `io.github.<owner>`. The README must disambiguate TypeSafe (the AI platform) from Typesafe Inc.
