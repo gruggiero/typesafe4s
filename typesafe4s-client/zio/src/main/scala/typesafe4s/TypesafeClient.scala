@@ -5,6 +5,7 @@ import zio.{IO, Scope, ZIO}
 import zio.stream.ZStream
 
 import typesafe4s.client.{ApiSurface, BatchedClient, Client, LoweredClient, Transport, TypesafeConfig}
+import typesafe4s.client.internal.ClientCio
 
 // ============================================================================
 // spec: effect-portability — the ZIO facade. The ZIO row is the ecosystem
@@ -26,10 +27,15 @@ object TypesafeClient extends ApiSurface[IO[TypesafeException, *]] {
     of(config, Transport.default)
 
   def of(config: TypesafeConfig, transport: Transport): TypesafeClient =
-    new LoweredClient[IO[TypesafeException, *]](Client.cio(config, transport))
-      with BatchedClient[IO[TypesafeException, *], [A] =>> ZStream[Any, TypesafeException, A]] {
+    wrap(Client.cio(config, transport))
+
+  // the facade over one carrier client; a model view (#25) is the same facade over the view
+  private def wrap(cio: ClientCio): TypesafeClient =
+    new LoweredClient[IO[TypesafeException, *]](cio) with BatchedClient[IO[TypesafeException, *], [A] =>> ZStream[Any, TypesafeException, A]] {
       protected def lower[A](carried: CIO[A]): IO[TypesafeException, A] = TypesafeClient.lower(carried)
       protected def lift[A](fa: IO[TypesafeException, A]): CIO[A]       = TypesafeClient.lift(fa)
+
+      override def withModel(model: String): TypesafeClient = wrap(cio.withModel(model))
 
       def batched[A](
         state: A,

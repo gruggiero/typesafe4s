@@ -12,6 +12,11 @@ one of: Added, Changed, Deprecated, Removed, Fixed, Security. At a release, the 
 
 ## [Unreleased]
 
+### Added
+
+- `client.withModel(model)` returns a view of the client that asks another model over the same transport,
+  retry policy and headers; closing the view releases nothing (#25).
+
 ## [0.1.0] - 2026-09-19
 
 First release. A Scala 3 SDK for the TypeSafe System One API (`jev` models): send a state and

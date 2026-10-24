@@ -54,6 +54,13 @@ trait Client[F[_]] {
   // Releases what the client holds — the transport's `release`.
   def close: F[Unit]
 
+  /**
+    * A view of this client that asks `model` instead of the configured one (#25). Only the request's `model` changes: the view shares
+    * this client's transport, retry policy, allowance and headers. The client that built the transport owns it, so closing a view
+    * releases nothing; close the original client when done with it and every view of it.
+    */
+  def withModel(model: String): Client[F]
+
   // spec: client-configuration — Evaluation/listJudges: the models the
   // account may ask. NO local judgement of a name — a configured model
   // absent from the listing is still sent as given.

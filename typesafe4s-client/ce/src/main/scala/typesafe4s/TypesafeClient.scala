@@ -5,6 +5,7 @@ import fs2.Stream
 import kyo.compat.CIO
 
 import typesafe4s.client.{ApiSurface, BatchedClient, Client, LoweredClient, Transport, TypesafeConfig}
+import typesafe4s.client.internal.ClientCio
 
 // ============================================================================
 // spec: effect-portability — the Cats Effect facade. Failures ride IO's
@@ -23,9 +24,15 @@ object TypesafeClient extends ApiSurface[IO] {
     of(config, Transport.default)
 
   def of(config: TypesafeConfig, transport: Transport): TypesafeClient =
-    new LoweredClient[IO](Client.cio(config, transport)) with BatchedClient[IO, [A] =>> Stream[IO, A]] {
+    wrap(Client.cio(config, transport))
+
+  // the facade over one carrier client; a model view (#25) is the same facade over the view
+  private def wrap(cio: ClientCio): TypesafeClient =
+    new LoweredClient[IO](cio) with BatchedClient[IO, [A] =>> Stream[IO, A]] {
       protected def lower[A](carried: CIO[A]): IO[A] = TypesafeClient.lower(carried)
       protected def lift[A](fa: IO[A]): CIO[A]       = TypesafeClient.lift(fa)
+
+      override def withModel(model: String): TypesafeClient = wrap(cio.withModel(model))
 
       def batched[A](
         state: A,

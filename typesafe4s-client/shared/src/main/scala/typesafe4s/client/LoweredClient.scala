@@ -41,6 +41,16 @@ abstract private[typesafe4s] class LoweredClient[F[_]](underlying: ClientCio) ex
 
   final def listModels: F[List[Model]] = lower(underlying.listModels)
 
+  // #25: the same two conversions over the carrier's model view. A facade
+  // whose published type is narrower overrides this to keep that type.
+  def withModel(model: String): Client[F] = {
+    val outer = this
+    new LoweredClient[F](underlying.withModel(model)) {
+      protected def lower[A](carried: CIO[A]): F[A] = outer.lower(carried)
+      protected def lift[A](fa: F[A]): CIO[A]       = outer.lift(fa)
+    }
+  }
+
   // spec: question-batching — the batched session on the carrier client,
   // forwarder so each row's `batched` seam can reach it. Returns the
   // carrier-level session; the row wraps `next`/`close` in its own

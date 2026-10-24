@@ -7,7 +7,7 @@ import scala.concurrent.duration.*
 import kyo.compat.*
 import munit.FunSuite
 
-import typesafe4s.{ApiKey, HttpResponse, Model, RetryPolicy, TypesafeClient}
+import typesafe4s.{ApiKey, Entry, HttpResponse, Model, Noul, RetryPolicy, TypesafeClient}
 import typesafe4s.client.{LogLevel, TypesafeConfig}
 import typesafe4s.client.internal.StandInTransport
 import typesafe4s.client.internal.StandInTransport.Step
@@ -63,6 +63,29 @@ final class FacadeLifecycleParitySuite extends FunSuite {
         client     = TypesafeClient.of(config, transport)
         models    <- TypesafeClient.lift(client.listModels)
       } yield assertEquals(models, List(Model("jev-1", "Jev One", "2026-01-02")))
+    program.unsafeRun
+  }
+
+  // #25: a model view keeps the row's published type, sends its own model
+  // over the shared transport, and releasing it releases nothing
+  test("a-model-view-shares-the-transport-on-every-artifact") {
+    val answer  = HttpResponse(200, Nil, """{"model":"jev-cheap","answers":{"q":{"type":"noul","noul":0.5}},"usage":{}}""")
+    val program =
+      for {
+        transport  <- StandInTransport.init(Nil, Step.Answer(answer))
+        client      = TypesafeClient.of(config, transport)
+        view        = client.withModel("jev-cheap"): TypesafeClient
+        evaluation <- TypesafeClient.lift(view.systemOneDynamic("subject")(Seq("q" -> Noul(Entry.text("ok?")))))
+        _          <- TypesafeClient.lift(view.close)
+        afterView  <- transport.released.get
+        _          <- TypesafeClient.lift(client.close)
+        afterBoth  <- transport.released.get
+        requests   <- transport.requests
+      } yield {
+        assertEquals(evaluation.model, "jev-cheap")
+        assert(requests.head.body.exists(_.contains("\"model\":\"jev-cheap\"")), requests.head.body)
+        assertEquals((afterView, afterBoth), (0, 1))
+      }
     program.unsafeRun
   }
 }

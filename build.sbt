@@ -1,7 +1,13 @@
 import scala.sys.process.Process
 
 import _root_.io.getkyo.compat.CompatBackendAxis
-import com.typesafe.tools.mima.core.{DirectMissingMethodProblem, IncompatibleMethTypeProblem, IncompatibleResultTypeProblem, ProblemFilters}
+import com.typesafe.tools.mima.core.{
+  DirectMissingMethodProblem,
+  IncompatibleMethTypeProblem,
+  IncompatibleResultTypeProblem,
+  ProblemFilters,
+  ReversedMissingMethodProblem
+}
 import sbt.VirtualAxis
 
 // Cross-compiled on two Scala 3 minors: 3.8.4 is the PUBLISHED build —
@@ -749,7 +755,10 @@ lazy val mimaSettings = Def.settings(
     ProblemFilters.exclude[DirectMissingMethodProblem]("typesafe4s.TypesafeException#Overloaded.apply"),
     // #23: resolve's allowance is an Option, read from TYPESAFE_TIMEOUT when absent
     ProblemFilters.exclude[IncompatibleMethTypeProblem]("typesafe4s.client.TypesafeConfig.resolve"),
-    ProblemFilters.exclude[IncompatibleResultTypeProblem]("typesafe4s.client.TypesafeConfig.resolve$default$5")
+    ProblemFilters.exclude[IncompatibleResultTypeProblem]("typesafe4s.client.TypesafeConfig.resolve$default$5"),
+    // #25: a client offers a model view (withModel)
+    ProblemFilters.exclude[ReversedMissingMethodProblem]("typesafe4s.client.Client.withModel"),
+    ProblemFilters.exclude[ReversedMissingMethodProblem]("typesafe4s.client.BatchedClient.withModel")
   )
 )
 

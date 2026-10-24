@@ -8,7 +8,7 @@ import org.apache.pekko.NotUsed
 import org.apache.pekko.stream.scaladsl.Source
 
 import typesafe4s.client.{ApiSurface, BatchedClient, Client, LoweredClient, Transport, TypesafeConfig}
-import typesafe4s.client.internal.BatchRun
+import typesafe4s.client.internal.{BatchRun, ClientCio}
 
 // ============================================================================
 // spec: effect-portability — the Pekko facade. Pekko rides on
@@ -31,9 +31,15 @@ object TypesafeClient extends ApiSurface[Future] {
     of(config, Transport.default)
 
   def of(config: TypesafeConfig, transport: Transport): TypesafeClient =
-    new LoweredClient[Future](Client.cio(config, transport)) with BatchedClient[Future, [A] =>> Source[A, NotUsed]] {
+    wrap(Client.cio(config, transport))
+
+  // the facade over one carrier client; a model view (#25) is the same facade over the view
+  private def wrap(cio: ClientCio): TypesafeClient =
+    new LoweredClient[Future](cio) with BatchedClient[Future, [A] =>> Source[A, NotUsed]] {
       protected def lower[A](carried: CIO[A]): Future[A] = TypesafeClient.lower(carried)
       protected def lift[A](fa: Future[A]): CIO[A]       = TypesafeClient.lift(fa)
+
+      override def withModel(model: String): TypesafeClient = wrap(cio.withModel(model))
 
       def batched[A](
         state: A,

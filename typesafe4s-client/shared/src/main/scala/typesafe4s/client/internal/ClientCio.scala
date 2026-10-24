@@ -31,7 +31,9 @@ import typesafe4s.client.{Client, Transport, TypesafeConfig}
 final private[typesafe4s] class ClientCio(
   val config: TypesafeConfig,
   val transport: Transport,
-  val clock: Clock
+  val clock: Clock,
+  // false for a model view (#25): the client that built the transport owns it
+  ownsTransport: Boolean = true
 ) extends Client[CIO] {
 
   def askDynamic[A](
@@ -69,7 +71,11 @@ final private[typesafe4s] class ClientCio(
 
   // spec: client-configuration — the explicit release: what the client
   // holds is the transport; releasing it is the transport's `release`.
-  def close: CIO[Unit] = transport.release
+  def close: CIO[Unit] = if (ownsTransport) transport.release else CIO.unit
+
+  // #25: the same transport and clock, with only the request's model changed
+  def withModel(model: String): ClientCio =
+    new ClientCio(config.copy(model = model), transport, clock, ownsTransport = false)
 
   // spec: client-configuration — Evaluation/listJudges: `GET /v1/models`
   // through the same exchange pipeline, strictly decoded.

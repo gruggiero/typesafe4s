@@ -4,6 +4,7 @@ import kyo.{<, Abort, Async, Chunk, Emit, Scope, Stream, Sync}
 import kyo.compat.CIO
 
 import typesafe4s.client.{ApiSurface, BatchedClient, Client, LoweredClient, Transport, TypesafeConfig}
+import typesafe4s.client.internal.ClientCio
 
 // ============================================================================
 // spec: effect-portability — the Kyo facade. The Kyo effect carries its
@@ -30,10 +31,16 @@ object TypesafeClient extends ApiSurface[[A] =>> A < (Abort[Throwable] & Async)]
     of(config, Transport.default)
 
   def of(config: TypesafeConfig, transport: Transport): TypesafeClient =
-    new LoweredClient[[A] =>> A < (Abort[Throwable] & Async)](Client.cio(config, transport))
+    wrap(Client.cio(config, transport))
+
+  // the facade over one carrier client; a model view (#25) is the same facade over the view
+  private def wrap(cio: ClientCio): TypesafeClient =
+    new LoweredClient[[A] =>> A < (Abort[Throwable] & Async)](cio)
       with BatchedClient[[A] =>> A < (Abort[Throwable] & Async), [A] =>> Stream[A, Abort[Throwable] & Async & Scope]] {
       protected def lower[A](carried: CIO[A]): A < (Abort[Throwable] & Async) = TypesafeClient.lower(carried)
       protected def lift[A](fa: A < (Abort[Throwable] & Async)): CIO[A]       = TypesafeClient.lift(fa)
+
+      override def withModel(model: String): TypesafeClient = wrap(cio.withModel(model))
 
       def batched[A](
         state: A,
