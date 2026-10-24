@@ -432,6 +432,7 @@ docSite := {
     "typesafe4s-zio-json"     -> (LocalProject("jsonZio") / Compile / doc).value,
     "typesafe4s-jsoniter"     -> (LocalProject("jsonJsoniter") / Compile / doc).value,
     "typesafe4s-upickle"      -> (LocalProject("jsonUpickle") / Compile / doc).value,
+    "typesafe4s-play-json"    -> (LocalProject("jsonPlay") / Compile / doc).value,
     "typesafe4s-compat-ce"    -> (LocalProject("compatCe") / Compile / doc).value
   )
   val site    = (ThisBuild / baseDirectory).value / "target" / "site"
