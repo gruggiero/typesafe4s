@@ -30,8 +30,8 @@ private[typesafe4s] object Ask {
       configured = UserAgent.withSdk(config.headers)
     )
     Exchange
-      .run(transport, config.retryPolicy, clock, config.allowance)(request)
-      .flatMap { response =>
+      .measured(transport, config.retryPolicy, clock, config.allowance)(request)
+      .flatMap { (response, attempts, elapsed) =>
         val rid = Exchange
           .requestId(response)
           .flatMap(r => RequestId.fromHeader(request.redact(RequestId.value(r))))
@@ -43,7 +43,7 @@ private[typesafe4s] object Ask {
             // stores them (spec: client-configuration — no failure
             // renders the secret)
             e => CIO.fail(e.copy(detail = request.redact(e.detail))),
-            set => CIO.value(Evaluation(set, set.model, set.usage, set.requestId))
+            set => CIO.value(Evaluation(set, set.model, set.usage, set.requestId, attempts, elapsed))
           )
       }
   }

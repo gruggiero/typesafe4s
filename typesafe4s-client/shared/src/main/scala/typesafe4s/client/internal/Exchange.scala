@@ -39,6 +39,23 @@ private[typesafe4s] object Exchange {
     Retry.run(policy, clock)(attempt(transport, clock, allowance)(request))
 
   /**
+    * `run`, also returning how many attempts the call made and the time it
+    * took on `clock`, from the start of the first attempt to the response,
+    * waits between retries included.
+    */
+  def measured(
+    transport: Transport,
+    policy: RetryPolicy,
+    clock: Clock,
+    allowance: FiniteDuration
+  )(request: HttpRequest): CIO[(HttpResponse, Int, FiniteDuration)] =
+    for {
+      start             <- clock.monotonic
+      (response, count) <- Retry.counted(policy, clock)(attempt(transport, clock, allowance)(request))
+      end               <- clock.monotonic
+    } yield (response, count, end - start)
+
+  /**
     * One attempt: the exchange raced against `clock.sleep(allowance)` —
     * NEVER `CIO.timeout`, which would read the backend's real clock.
     *

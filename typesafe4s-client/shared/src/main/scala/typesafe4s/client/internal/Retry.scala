@@ -31,6 +31,13 @@ private[typesafe4s] object Retry {
     * starts — the first attempt counts against it.
     */
   def run[A](policy: RetryPolicy, clock: Clock)(operation: CIO[A]): CIO[A] =
+    counted(policy, clock)(operation).map(_._1)
+
+  /**
+    * `run`, also returning how many times `operation` was attempted: 1 when
+    * the first attempt succeeded.
+    */
+  def counted[A](policy: RetryPolicy, clock: Clock)(operation: CIO[A]): CIO[(A, Int)] =
     for {
       // the call's own clock — read once, only when a bound is configured
       started <- policy.totalBound match {
@@ -52,8 +59,8 @@ private[typesafe4s] object Retry {
     operation: CIO[A],
     started: Option[FiniteDuration],
     attempt: Attempt
-  ): CIO[A] =
-    operation.recover { failure =>
+  ): CIO[(A, Int)] =
+    operation.map(a => (a, attempt.ordinal + 1)).recover { failure =>
       failure match {
         case e: TypesafeException if policy.isRetryable(e) && attempt.ordinal < policy.attempts =>
           retryAfter(policy, clock, operation, started, attempt, e)
@@ -75,7 +82,7 @@ private[typesafe4s] object Retry {
     started: Option[FiniteDuration],
     attempt: Attempt,
     failure: TypesafeException
-  ): CIO[A] =
+  ): CIO[(A, Int)] =
     for {
       u        <- CIO.defer(Random.nextDouble())
       wait      = RetryPolicy.nextWait(policy, attempt, policy.advisedDelay(failure), u)
