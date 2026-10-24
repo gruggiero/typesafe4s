@@ -74,7 +74,8 @@ final private[typesafe4s] class ClientCio(
   // spec: client-configuration — Evaluation/listJudges: `GET /v1/models`
   // through the same exchange pipeline, strictly decoded.
   def listModels: CIO[List[Model]] = {
-    val request = HttpRequest.exchange(
+    val observer = LoggingObserver.of(config)
+    val request  = HttpRequest.exchange(
       HttpMethod.Get,
       s"${config.baseUrl}/v1/models",
       None,
@@ -82,7 +83,7 @@ final private[typesafe4s] class ClientCio(
       configured = UserAgent.withSdk(config.headers)
     )
     Exchange
-      .run(transport, config.retryPolicy, clock, config.allowance, config.observer)(request)
+      .run(transport, config.retryPolicy, clock, config.allowance, observer)(request)
       .flatMap { response =>
         val rid = Exchange
           .requestId(response)
@@ -92,7 +93,7 @@ final private[typesafe4s] class ClientCio(
           .fold(
             e => {
               val scrubbed = e.copy(detail = request.redact(e.detail))
-              Observe(config.observer.onFailure(request.method, Observe.path(request.target), scrubbed)).flatMap(_ => CIO.fail(scrubbed))
+              Observe(observer.onFailure(request.method, Observe.path(request.target), scrubbed)).flatMap(_ => CIO.fail(scrubbed))
             },
             models => CIO.value(models)
           )

@@ -22,7 +22,8 @@ private[typesafe4s] object Ask {
     state: A,
     questions: QuestionSet
   )(using enc: StateEncoder[A]): CIO[Evaluation[AnswerSet]] = {
-    val request = HttpRequest.exchange(
+    val observer = LoggingObserver.of(config)
+    val request  = HttpRequest.exchange(
       HttpMethod.Post,
       s"${config.baseUrl}/v1/systemone",
       Some(Json.render(SystemOne.renderRequest(state, config.model, questions))),
@@ -30,7 +31,7 @@ private[typesafe4s] object Ask {
       configured = UserAgent.withSdk(config.headers)
     )
     Exchange
-      .run(transport, config.retryPolicy, clock, config.allowance, config.observer)(request)
+      .run(transport, config.retryPolicy, clock, config.allowance, observer)(request)
       .flatMap { response =>
         val rid = Exchange
           .requestId(response)
@@ -44,10 +45,10 @@ private[typesafe4s] object Ask {
             // renders the secret)
             e => {
               val scrubbed = e.copy(detail = request.redact(e.detail))
-              Observe(config.observer.onFailure(request.method, Observe.path(request.target), scrubbed)).flatMap(_ => CIO.fail(scrubbed))
+              Observe(observer.onFailure(request.method, Observe.path(request.target), scrubbed)).flatMap(_ => CIO.fail(scrubbed))
             },
             set =>
-              Observe(config.observer.onEvaluation(set.model, set.usage, set.requestId))
+              Observe(observer.onEvaluation(set.model, set.usage, set.requestId))
                 .map(_ => Evaluation(set, set.model, set.usage, set.requestId))
           )
       }
