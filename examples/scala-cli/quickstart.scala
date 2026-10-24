@@ -1,4 +1,5 @@
 //> using scala 3.8.4
+//> using jvm 21
 //> using dep io.github.gruggiero::typesafe4s-client-zio:0.1.0
 
 // A one-file typesafe4s program for scala-cli (#53):
