@@ -68,6 +68,7 @@ private object ClientConfigurationTypeContract {
     val baseUrlEnv  = "TYPESAFE_BASE_URL"
     val modelEnv    = "TYPESAFE_DEFAULT_MODEL"
     val logLevelEnv = "TYPESAFE_LOG_LEVEL"
+    val timeoutEnv  = "TYPESAFE_TIMEOUT"
 
     // the documented defaults
     val defaultBaseUrl   = "https://api.typesafe.ai"
@@ -95,7 +96,7 @@ private object ClientConfigurationTypeContract {
       baseUrl: Option[String] = None,
       model: Option[String] = None,
       logLevel: Option[String] = None,
-      allowance: FiniteDuration = defaultAllowance,
+      allowance: Option[FiniteDuration] = None,
       retryPolicy: RetryPolicy = RetryPolicy.default,
       headers: List[(String, String)] = Nil,
       environment: String => Option[String] = sys.env.get

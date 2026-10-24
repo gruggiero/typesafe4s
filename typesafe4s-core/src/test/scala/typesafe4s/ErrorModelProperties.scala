@@ -117,7 +117,7 @@ class ErrorModelProperties extends ScalaCheckSuite {
     TypesafeException.NotFound(None, "d"),
     TypesafeException.UnprocessableEntity(None, "d"),
     TypesafeException.RateLimit(None, None, "d"),
-    TypesafeException.Overloaded(None, "d"),
+    TypesafeException.Overloaded(None, None, "d"),
     TypesafeException.InternalServer(500, None, "d"),
     TypesafeException.ResponseValidation(None, "a.b", "d"),
     TypesafeException.ConnectionFailed(new RuntimeException("d")),
@@ -190,6 +190,24 @@ class ErrorModelProperties extends ScalaCheckSuite {
         case r: TypesafeException.RateLimit => r.retryAfter == expected
         case _                              => false
       }
+    }
+  }
+
+  // an overloaded service names its delay the way a rate-limiting one does
+  property("overloaded-carries-the-service-named-delay-or-none") {
+    forAll(genRetryAfterCase) { case (delayHeaders, expected) =>
+      TypesafeException.fromResponse(529, delayHeaders, "busy") match {
+        case o: TypesafeException.Overloaded => o.retryAfter == expected
+        case _                               => false
+      }
+    }
+  }
+
+  test("an-http-date-retry-after-names-no-delay") {
+    val headers = List("Retry-After" -> "Wed, 21 Oct 2026 07:28:00 GMT")
+    TypesafeException.fromResponse(529, headers, "busy") match {
+      case o: TypesafeException.Overloaded => assertEquals(o.retryAfter, None)
+      case other                           => fail(s"expected Overloaded, got $other")
     }
   }
 

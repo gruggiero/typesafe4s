@@ -1,0 +1,17 @@
+# Categories for GitHub's generated release notes (#57), by pull request label.
+changelog:
+  exclude:
+    labels: [duplicate, invalid, wontfix]
+  categories:
+    - title: Breaking changes
+      labels: [breaking]
+    - title: Enhancements
+      labels: [enhancement]
+    - title: Fixes
+      labels: [bug]
+    - title: Documentation
+      labels: [documentation, good first issue]
+    - title: Dependency updates
+      labels: [dependencies]
+    - title: Other changes
+      labels: ["*"]
