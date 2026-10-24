@@ -82,7 +82,7 @@ final private[typesafe4s] class ClientCio(
       configured = UserAgent.withSdk(config.headers)
     )
     Exchange
-      .run(transport, config.retryPolicy, clock, config.allowance)(request)
+      .run(transport, config.retryPolicy, clock, config.allowance, config.observer)(request)
       .flatMap { response =>
         val rid = Exchange
           .requestId(response)
@@ -90,7 +90,10 @@ final private[typesafe4s] class ClientCio(
         Models
           .decodeResponse(rid, response.body)
           .fold(
-            e => CIO.fail(e.copy(detail = request.redact(e.detail))),
+            e => {
+              val scrubbed = e.copy(detail = request.redact(e.detail))
+              Observe(config.observer.onFailure(request.method, Observe.path(request.target), scrubbed)).flatMap(_ => CIO.fail(scrubbed))
+            },
             models => CIO.value(models)
           )
       }

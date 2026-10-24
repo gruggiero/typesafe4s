@@ -21,7 +21,9 @@ final case class TypesafeConfig(
   allowance: FiniteDuration,
   retryPolicy: RetryPolicy,
   headers: List[(String, String)],
-  logLevel: LogLevel
+  logLevel: LogLevel,
+  // #28: tracing and metrics callbacks; not part of the rendering below
+  observer: Observer = Observer.noop
 ) {
 
   /**

@@ -30,7 +30,7 @@ private[typesafe4s] object Ask {
       configured = UserAgent.withSdk(config.headers)
     )
     Exchange
-      .run(transport, config.retryPolicy, clock, config.allowance)(request)
+      .run(transport, config.retryPolicy, clock, config.allowance, config.observer)(request)
       .flatMap { response =>
         val rid = Exchange
           .requestId(response)
@@ -42,8 +42,13 @@ private[typesafe4s] object Ask {
             // the exchange's credential scrubs them before the member
             // stores them (spec: client-configuration — no failure
             // renders the secret)
-            e => CIO.fail(e.copy(detail = request.redact(e.detail))),
-            set => CIO.value(Evaluation(set, set.model, set.usage, set.requestId))
+            e => {
+              val scrubbed = e.copy(detail = request.redact(e.detail))
+              Observe(config.observer.onFailure(request.method, Observe.path(request.target), scrubbed)).flatMap(_ => CIO.fail(scrubbed))
+            },
+            set =>
+              Observe(config.observer.onEvaluation(set.model, set.usage, set.requestId))
+                .map(_ => Evaluation(set, set.model, set.usage, set.requestId))
           )
       }
   }

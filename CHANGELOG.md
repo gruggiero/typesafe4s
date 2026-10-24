@@ -12,6 +12,11 @@ one of: Added, Changed, Deprecated, Removed, Fixed, Security. At a release, the 
 
 ## [Unreleased]
 
+### Added
+
+- An `Observer` on `TypesafeConfig` receives each attempt, response, retry, failure and evaluation, for tracing
+  and metrics. It never sees the API key, and an exception it throws cannot fail a call (#28).
+
 ## [0.1.0] - 2026-09-19
 
 First release. A Scala 3 SDK for the TypeSafe System One API (`jev` models): send a state and
