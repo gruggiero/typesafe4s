@@ -1,5 +1,11 @@
 # typesafe4s
 
+[![CI](https://github.com/gruggiero/typesafe4s/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/gruggiero/typesafe4s/actions/workflows/ci.yml)
+[![Maven Central](https://img.shields.io/maven-central/v/io.github.gruggiero/typesafe4s-core_3)](https://central.sonatype.com/namespace/io.github.gruggiero)
+[![Scala 3](https://img.shields.io/badge/scala-3.8%2B-dc322f?logo=scala)](https://www.scala-lang.org/)
+[![JDK 21+](https://img.shields.io/badge/JDK-21%2B-437291)](#development)
+[![License](https://img.shields.io/github/license/gruggiero/typesafe4s)](LICENSE)
+
 A Scala 3 SDK for the [TypeSafe](https://docs.typesafe.ai) System One API (`jev` model family):
 send state and typed questions, get typed answers with calibrated probabilities.
 
@@ -54,6 +60,45 @@ and the published POMs declare it (`versionScheme`), so sbt and other build tool
 
 `sbt check` runs [MiMa](https://github.com/lightbend-labs/mima) on every published artifact against
 the previous release, so a patch cannot break code compiled against it.
+
+### Other build tools
+
+The artifacts are Scala 3 libraries, so outside sbt the name carries the `_3` suffix (sbt's `%%`
+adds it for you). Swap `-zio` for `-ce`, `-ox`, `-kyo` or `-pekko` to pick your backend; the JSON
+adapters follow the same pattern (`typesafe4s-circe_3` and so on).
+
+Maven:
+
+```xml
+<dependency>
+  <groupId>io.github.gruggiero</groupId>
+  <artifactId>typesafe4s-client-zio_3</artifactId>
+  <version>0.1.0</version>
+</dependency>
+```
+
+Gradle (Kotlin DSL; the Groovy DSL takes the same string):
+
+```kotlin
+implementation("io.github.gruggiero:typesafe4s-client-zio_3:0.1.0")
+```
+
+Mill (1.x; 0.12 and earlier spell it `ivy"..."`):
+
+```scala
+def mvnDeps = Seq(mvn"io.github.gruggiero::typesafe4s-client-zio:0.1.0")
+```
+
+scala-cli, in a source file:
+
+```scala
+//> using dep io.github.gruggiero::typesafe4s-client-zio:0.1.0
+```
+
+To try the SDK in one file with no build, run
+[`examples/scala-cli/quickstart.scala`](examples/scala-cli/quickstart.scala):
+`scala-cli run examples/scala-cli/quickstart.scala`. Without `TYPESAFE_API_KEY` it answers from a
+canned response, so it runs anywhere.
 
 From the next release, `typesafe4s-play-json` adds the same adapter for
 [play-json](https://github.com/playframework/play-json), for Play Framework applications
@@ -161,6 +206,7 @@ TYPESAFE_API_KEY=… sbt parityAll
 
 ## Documentation
 
+- [API documentation](https://gruggiero.github.io/typesafe4s/) — Scaladoc for the core, every client row and the JSON adapters
 - [Changelog](CHANGELOG.md) — what changed in each release
 - [Architecture analysis](docs/architecture-analysis.md) — design rationale and trade-offs
 - [Project context](openspec/project.md) — module graph, stack, conventions
