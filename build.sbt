@@ -1,6 +1,7 @@
 import scala.sys.process.Process
 
 import _root_.io.getkyo.compat.CompatBackendAxis
+import com.typesafe.tools.mima.core.{DirectMissingMethodProblem, IncompatibleMethTypeProblem, IncompatibleResultTypeProblem, ProblemFilters}
 import sbt.VirtualAxis
 
 // Cross-compiled on two Scala 3 minors: 3.8.4 is the PUBLISHED build —
@@ -53,22 +54,41 @@ val CeLib = CompatBackendAxis.local("ce", "Ce", "-ce", Set("jvm"))
 
 inThisBuild(
   List(
-    scalaVersion     := scala38,
-    organization     := "io.github.gruggiero",
-    homepage         := Some(url("https://github.com/gruggiero/typesafe4s")),
-    licenses         := List(License.Apache2),
-    scmInfo          := Some(ScmInfo(url("https://github.com/gruggiero/typesafe4s/"), "scm:git:git@github.com:gruggiero/typesafe4s.git")),
-    developers       := List(Developer("gruggiero", "Giovanni Ruggiero", "giovanni.ruggiero@gmail.com", url("https://github.com/gruggiero"))),
-    compatKyoVersion := kyoVersion
+    scalaVersion         := scala38,
+    organization         := "io.github.gruggiero",
+    homepage             := Some(url("https://github.com/gruggiero/typesafe4s")),
+    licenses             := List(License.Apache2),
+    scmInfo              := Some(ScmInfo(url("https://github.com/gruggiero/typesafe4s/"), "scm:git:git@github.com:gruggiero/typesafe4s.git")),
+    developers           := List(Developer("gruggiero", "Giovanni Ruggiero", "giovanni.ruggiero@gmail.com", url("https://github.com/gruggiero"))),
+    compatKyoVersion     := kyoVersion,
+    // a 0.x minor (0.1 -> 0.2) may break binary compatibility, a patch (0.1.0 -> 0.1.1) may not;
+    // build tools read this to report a real conflict instead of evicting silently
+    versionScheme        := Some("early-semver"),
+    // only published modules are compared (`mimaSettings` turns the check on for them)
+    mimaFailOnNoPrevious := false
   )
 )
+
+// Binary compatibility (#55): every published module is compared with the
+// last release by MiMa, so a patch release cannot break callers' compiled
+// code. Raise it after each release; under early-semver a new minor may
+// break compatibility, and the bump to it resets the baseline.
+val mimaPreviousVersion = "0.1.0"
 
 name := "typesafe4s"
 
 addCommandAlias("fmt", "all scalafmtSbt scalafmt test:scalafmt")
 addCommandAlias(
   "check",
-  "checkCoreDependencies; checkPublicationContract; checkSharedSources; checkAdapterDependencies; checkReleaseReadiness; all scalafmtSbtCheck scalafmtCheck test:scalafmtCheck"
+  "checkCoreDependencies; checkPublicationContract; checkSharedSources; checkAdapterDependencies; checkReleaseReadiness; mima; all scalafmtSbtCheck scalafmtCheck test:scalafmtCheck"
+)
+// the published set only: the core, the five 3.8.4 client cells, the four adapters and compat-ce
+addCommandAlias(
+  "mima",
+  "core/mimaReportBinaryIssues; clientZio3_8_4/mimaReportBinaryIssues; clientCe3_8_4/mimaReportBinaryIssues; " +
+    "clientOx3_8_4/mimaReportBinaryIssues; clientKyo3_8_4/mimaReportBinaryIssues; clientPekko3_8_4/mimaReportBinaryIssues; " +
+    "jsonCirce/mimaReportBinaryIssues; jsonZio/mimaReportBinaryIssues; jsonJsoniter/mimaReportBinaryIssues; " +
+    "jsonUpickle/mimaReportBinaryIssues; compatCe/mimaReportBinaryIssues"
 )
 
 // spec: wire-codec — Requirement: The core carries no third-party runtime
@@ -505,6 +525,7 @@ lazy val root = project
 lazy val core = (projectMatrix in file("typesafe4s-core"))
   .settings(name := "typesafe4s-core")
   .settings(commonSettings)
+  .settings(mimaSettings)
   .settings(parallelUnitTests)
   // the canonical `core` cell is the published 3.8.4 build; `core3_9_0` is
   // compile+test only (the `_3` suffix collision forbids publishing both)
@@ -528,6 +549,7 @@ lazy val jsonCirce = project
   .in(file("typesafe4s-json-circe"))
   .settings(name := "typesafe4s-circe")
   .settings(commonSettings)
+  .settings(mimaSettings)
   .dependsOn(LocalProject("core") % "compile->compile;test->test")
   .settings(libraryDependencies += "io.circe" %% "circe-core" % circeVersion)
 
@@ -535,6 +557,7 @@ lazy val jsonZio = project
   .in(file("typesafe4s-json-zio"))
   .settings(name := "typesafe4s-zio-json")
   .settings(commonSettings)
+  .settings(mimaSettings)
   .dependsOn(LocalProject("core") % "compile->compile;test->test")
   .settings(libraryDependencies += "dev.zio" %% "zio-json" % zioJsonVersion)
 
@@ -545,6 +568,7 @@ lazy val jsonJsoniter = project
   .in(file("typesafe4s-json-jsoniter"))
   .settings(name := "typesafe4s-jsoniter")
   .settings(commonSettings)
+  .settings(mimaSettings)
   .dependsOn(LocalProject("core") % "compile->compile;test->test")
   .settings(libraryDependencies += "com.github.plokhotnyuk.jsoniter-scala" %% "jsoniter-scala-core" % jsoniterVersion)
 
@@ -552,6 +576,7 @@ lazy val jsonUpickle = project
   .in(file("typesafe4s-json-upickle"))
   .settings(name := "typesafe4s-upickle")
   .settings(commonSettings)
+  .settings(mimaSettings)
   .dependsOn(LocalProject("core") % "compile->compile;test->test")
   .settings(libraryDependencies += "com.lihaoyi" %% "ujson" % upickleVersion)
 
@@ -570,6 +595,7 @@ lazy val compatCe = project
   .in(file("typesafe4s-compat-ce"))
   .settings(name := "typesafe4s-compat-ce")
   .settings(commonSettings)
+  .settings(mimaSettings)
   .settings(
     libraryDependencies ++= Seq(
       "org.typelevel" %% "cats-effect" % catsEffectVersion,
@@ -593,6 +619,7 @@ lazy val client = (projectMatrix in file("typesafe4s-client"))
   .enablePlugins(BuildInfoPlugin)
   .settings(name := "typesafe4s-client")
   .settings(commonSettings)
+  .settings(mimaSettings)
   .settings(parallelUnitTests)
   .settings(
     // compatLibrary emits an implicit Future anchor row; it is a compile-only baseline, never published.
@@ -706,6 +733,24 @@ lazy val commonSettings = Def.settings(
   // another module's types link there (sbt passes those locations to Scaladoc through autoAPIMappings)
   apiURL             := Some(url(s"$docsSiteUrl/api/${moduleName.value}/")),
   autoAPIMappings    := true
+)
+
+// Applied to the published modules only (core, client, the adapters, compat-ce). Within them, the cells that never
+// publish (3.9.0 twins, the future anchor) have nothing to compare; `checkPublicationContract` guards that set.
+lazy val mimaSettings = Def.settings(
+  mimaPreviousArtifacts := {
+    if (skipNon38Publish.value || moduleName.value.endsWith("-future")) Set.empty
+    else Set(organization.value %% moduleName.value % mimaPreviousVersion)
+  },
+  // Intended breaks for 0.2.0 (early-semver: a 0.x minor may break); delete these when mimaPreviousVersion moves to 0.2.0.
+  mimaBinaryIssueFilters ++= Seq(
+    // #24: Overloaded carries the delay the service names (retryAfter), like RateLimit
+    ProblemFilters.exclude[IncompatibleResultTypeProblem]("typesafe4s.TypesafeException#Overloaded._2"),
+    ProblemFilters.exclude[DirectMissingMethodProblem]("typesafe4s.TypesafeException#Overloaded.apply"),
+    // #23: resolve's allowance is an Option, read from TYPESAFE_TIMEOUT when absent
+    ProblemFilters.exclude[IncompatibleMethTypeProblem]("typesafe4s.client.TypesafeConfig.resolve"),
+    ProblemFilters.exclude[IncompatibleResultTypeProblem]("typesafe4s.client.TypesafeConfig.resolve$default$5")
+  )
 )
 
 lazy val parallelUnitTests = Def.settings(Test / testForkedParallel := true)
