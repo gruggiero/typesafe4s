@@ -2,7 +2,7 @@ package typesafe4s
 
 import java.util.concurrent.TimeUnit
 
-import scala.concurrent.duration.FiniteDuration
+import scala.concurrent.duration.{Duration, FiniteDuration}
 
 // spec: error-model — Concepts Introduced: RequestId
 // The trace the service returns; the only handle support has. Reported absent
@@ -164,6 +164,16 @@ object TypesafeException {
   // defaulting (Gate-1 amendment A2).
   final case class InvalidConfiguration private[typesafe4s] (variable: String, detail: String) extends TypesafeException {
     protected def describe: String = s"the configured value of $variable cannot be used: $detail"
+  }
+
+  // #50: the client's circuit breaker is open after repeated failures, so
+  // the call was refused without a request. `retryIn` is how long until a
+  // trial call is let through; zero while a trial call is already in flight.
+  // Never retried: retrying would defeat the breaker.
+  final case class CircuitOpen private[typesafe4s] (retryIn: FiniteDuration) extends TypesafeException {
+    protected def describe: String =
+      if (retryIn <= Duration.Zero) "the circuit breaker is open and a trial call is in flight; no request was sent"
+      else s"the circuit breaker is open after repeated failures; no request was sent; a trial call is allowed in ${retryIn.toMillis} ms"
   }
 
   /**

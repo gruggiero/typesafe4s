@@ -12,6 +12,12 @@ one of: Added, Changed, Deprecated, Removed, Fixed, Security. At a release, the 
 
 ## [Unreleased]
 
+### Added
+
+- `TypesafeConfig.circuitBreaker` (`CircuitBreakerPolicy(failureThreshold, coolDown)`) stops calling a failing
+  service: once open, calls fail at once with the new `TypesafeException.CircuitOpen`, and after the cool-down one trial call is
+  let through. It is off by default (#50).
+
 ## [0.1.0] - 2026-09-19
 
 First release. A Scala 3 SDK for the TypeSafe System One API (`jev` models): send a state and

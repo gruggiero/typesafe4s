@@ -749,7 +749,11 @@ lazy val mimaSettings = Def.settings(
     ProblemFilters.exclude[DirectMissingMethodProblem]("typesafe4s.TypesafeException#Overloaded.apply"),
     // #23: resolve's allowance is an Option, read from TYPESAFE_TIMEOUT when absent
     ProblemFilters.exclude[IncompatibleMethTypeProblem]("typesafe4s.client.TypesafeConfig.resolve"),
-    ProblemFilters.exclude[IncompatibleResultTypeProblem]("typesafe4s.client.TypesafeConfig.resolve$default$5")
+    ProblemFilters.exclude[IncompatibleResultTypeProblem]("typesafe4s.client.TypesafeConfig.resolve$default$5"),
+    // #50: TypesafeConfig carries an optional CircuitBreakerPolicy
+    ProblemFilters.exclude[DirectMissingMethodProblem]("typesafe4s.client.TypesafeConfig.this"),
+    ProblemFilters.exclude[DirectMissingMethodProblem]("typesafe4s.client.TypesafeConfig.copy"),
+    ProblemFilters.exclude[DirectMissingMethodProblem]("typesafe4s.client.TypesafeConfig.apply")
   )
 )
 

@@ -67,6 +67,7 @@ final case class RetryPolicy @publicInBinary private (
       case _: TypesafeException.InvalidQuestion      => false
       case _: TypesafeException.MissingCredential    => false
       case _: TypesafeException.InvalidConfiguration => false
+      case _: TypesafeException.CircuitOpen          => false
     }
 
   // spec: retry-policy — Requirement: A wait the service asks for is preferred
@@ -91,6 +92,7 @@ final case class RetryPolicy @publicInBinary private (
       case _: TypesafeException.InvalidQuestion      => None
       case _: TypesafeException.MissingCredential    => None
       case _: TypesafeException.InvalidConfiguration => None
+      case _: TypesafeException.CircuitOpen          => None
     }
 }
 

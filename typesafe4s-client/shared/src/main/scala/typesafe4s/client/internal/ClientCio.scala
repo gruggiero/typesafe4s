@@ -34,11 +34,14 @@ final private[typesafe4s] class ClientCio(
   val clock: Clock
 ) extends Client[CIO] {
 
+  // #50: one breaker per client, shared by every call it makes
+  private val breaker: Option[Breaker] = config.circuitBreaker.map(new Breaker(_))
+
   def askDynamic[A](
     state: A,
     questions: Either[TypesafeException.InvalidQuestion, QuestionSet]
   )(using enc: StateEncoder[A]): CIO[Evaluation[AnswerSet]] =
-    questions.fold(e => CIO.fail(e), qs => Ask.run(config, transport, clock)(state, qs))
+    questions.fold(e => CIO.fail(e), qs => Ask.run(config, transport, clock, breaker)(state, qs))
 
   def askTyped[A, N <: Tuple, V <: Tuple](
     state: A,
@@ -47,7 +50,7 @@ final private[typesafe4s] class ClientCio(
     questions.fold(
       e => CIO.fail(e),
       qs =>
-        Ask.run(config, transport, clock)(state, qs).flatMap { ev =>
+        Ask.run(config, transport, clock, breaker)(state, qs).flatMap { ev =>
           SystemOne
             .assembleTyped[N, V](qs, ev.answers)
             .fold(
@@ -65,7 +68,7 @@ final private[typesafe4s] class ClientCio(
     questions: Either[TypesafeException.InvalidQuestion, QuestionSet],
     concurrency: ConcurrencyBound
   )(using enc: StateEncoder[A]): CIO[BatchRun] =
-    BatchRun.start(config, transport, clock, concurrency)(state, questions)
+    BatchRun.start(config, transport, clock, concurrency, breaker)(state, questions)
 
   // spec: client-configuration — the explicit release: what the client
   // holds is the transport; releasing it is the transport's `release`.
@@ -82,7 +85,7 @@ final private[typesafe4s] class ClientCio(
       configured = UserAgent.withSdk(config.headers)
     )
     Exchange
-      .run(transport, config.retryPolicy, clock, config.allowance)(request)
+      .run(transport, config.retryPolicy, clock, config.allowance, breaker)(request)
       .flatMap { response =>
         val rid = Exchange
           .requestId(response)
