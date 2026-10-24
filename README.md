@@ -83,6 +83,20 @@ sbt "examplesCe3_8_4/runMain typesafe4s.examples.ConfidenceRouting"   # confiden
 # (each row also has a `3_9_0` cell — see "Scala versions" below)
 ```
 
+### Large question sets
+
+`systemOneBatched` splits a question set too large for one exchange into batches and streams one
+`Evaluation` per batch. To get the evaluation of the whole set, collect the stream and merge it with
+`Evaluation.combine`, which unions the answers (a name answered twice is an error), sums the usage and
+keeps the model (ZIO shown; every row's stream collects the same way):
+
+```scala
+for {
+  evals <- client.systemOneBatched(state)(questions).runCollect
+  whole <- ZIO.fromEither(Evaluation.combine(evals))
+} yield whole.answers
+```
+
 ## Live tests
 
 The parity suite includes credential-gated live tests: with `TYPESAFE_API_KEY` set they perform a
