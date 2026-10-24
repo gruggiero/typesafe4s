@@ -1,8 +1,8 @@
 import scala.sys.process.Process
 
 import _root_.io.getkyo.compat.CompatBackendAxis
-import sbt.VirtualAxis
 import com.typesafe.tools.mima.core.{DirectMissingMethodProblem, IncompatibleResultTypeProblem, ProblemFilters}
+import sbt.VirtualAxis
 
 // Cross-compiled on two Scala 3 minors: 3.8.4 is the PUBLISHED build —
 // TASTy is forward-compatible, so a jar compiled on the lower minor is
