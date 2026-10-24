@@ -12,6 +12,11 @@ one of: Added, Changed, Deprecated, Removed, Fixed, Security. At a release, the 
 
 ## [Unreleased]
 
+### Added
+
+- Each `Evaluation` reports `attempts`, how many exchanges its call made, and `elapsed`, the time it took
+  on the client's clock with the waits between retries included (#27).
+
 ## [0.1.0] - 2026-09-19
 
 First release. A Scala 3 SDK for the TypeSafe System One API (`jev` models): send a state and
