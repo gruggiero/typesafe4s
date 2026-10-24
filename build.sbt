@@ -414,6 +414,56 @@ checkReleaseReadiness := {
   }
 }
 
+// API documentation site (#34) — `sbt docSite` builds the Scaladoc of the published modules into
+// target/site: one directory per artifact under api/, and an index linking them. The Pages
+// workflow deploys it. compat-ce is included because the ce client's pages link to its `kyo.compat` types.
+val docsSiteUrl = "https://gruggiero.github.io/typesafe4s"
+
+lazy val docSite = taskKey[File]("builds the API documentation site for the published modules into target/site")
+docSite := {
+  val modules = Seq(
+    "typesafe4s-core"         -> (LocalProject("core") / Compile / doc).value,
+    "typesafe4s-client-zio"   -> (LocalProject("clientZio3_8_4") / Compile / doc).value,
+    "typesafe4s-client-ce"    -> (LocalProject("clientCe3_8_4") / Compile / doc).value,
+    "typesafe4s-client-ox"    -> (LocalProject("clientOx3_8_4") / Compile / doc).value,
+    "typesafe4s-client-kyo"   -> (LocalProject("clientKyo3_8_4") / Compile / doc).value,
+    "typesafe4s-client-pekko" -> (LocalProject("clientPekko3_8_4") / Compile / doc).value,
+    "typesafe4s-circe"        -> (LocalProject("jsonCirce") / Compile / doc).value,
+    "typesafe4s-zio-json"     -> (LocalProject("jsonZio") / Compile / doc).value,
+    "typesafe4s-jsoniter"     -> (LocalProject("jsonJsoniter") / Compile / doc).value,
+    "typesafe4s-upickle"      -> (LocalProject("jsonUpickle") / Compile / doc).value,
+    "typesafe4s-play-json"    -> (LocalProject("jsonPlay") / Compile / doc).value,
+    "typesafe4s-compat-ce"    -> (LocalProject("compatCe") / Compile / doc).value
+  )
+  val site    = (ThisBuild / baseDirectory).value / "target" / "site"
+  IO.delete(site)
+  modules.foreach { case (name, api) => IO.copyDirectory(api, site / "api" / name) }
+  val links   = modules.map { case (name, _) => s"""    <li><a href="api/$name/index.html"><code>$name</code></a></li>""" }
+  IO.write(
+    site / "index.html",
+    s"""<!doctype html>
+       |<html lang="en">
+       |<head>
+       |  <meta charset="utf-8">
+       |  <meta name="viewport" content="width=device-width, initial-scale=1">
+       |  <title>typesafe4s API</title>
+       |  <style>body{font-family:system-ui,sans-serif;max-width:40rem;margin:3rem auto;padding:0 1rem;line-height:1.5}</style>
+       |</head>
+       |<body>
+       |  <h1>typesafe4s API documentation</h1>
+       |  <p>Version ${version.value}. Start with <code>typesafe4s-core</code> for the question and answer
+       |  model, then your backend's client. <a href="https://github.com/gruggiero/typesafe4s">Source and README</a>.</p>
+       |  <ul>
+       |${links.mkString("\n")}
+       |  </ul>
+       |</body>
+       |</html>
+       |""".stripMargin
+  )
+  streams.value.log.info(s"API documentation site: $site")
+  site
+}
+
 // Compile and test every row on both Scala minors. The Future anchor rows are compile-only: never published, boot nothing.
 addCommandAlias(
   "testUnit",
@@ -634,7 +684,11 @@ lazy val commonSettings = Def.settings(
     "org.scalameta" %% "munit"            % munitVersion           % Test,
     "org.scalameta" %% "munit-scalacheck" % munitScalacheckVersion % Test
   ),
-  Test / fork        := true
+  Test / fork        := true,
+  // API docs (#34): each module's Scaladoc is published under its artifact name, and references to
+  // another module's types link there (sbt passes those locations to Scaladoc through autoAPIMappings)
+  apiURL             := Some(url(s"$docsSiteUrl/api/${moduleName.value}/")),
+  autoAPIMappings    := true
 )
 
 lazy val parallelUnitTests = Def.settings(Test / testForkedParallel := true)
