@@ -50,4 +50,17 @@ object Observer {
     * The default: observes nothing.
     */
   val noop: Observer = new Observer {}
+
+  /**
+    * Calls `first`, then `second`, for every event. An exception thrown by `first` does not stop `second` from being called.
+    */
+  def both(first: Observer, second: Observer): Observer = new Observer {
+    private def each(f: Observer => Unit): Unit                                                           = { scala.util.Try(f(first)); f(second) }
+    override def onAttempt(method: HttpMethod, path: String, attempt: Int): Unit                          = each(_.onAttempt(method, path, attempt))
+    override def onResponse(method: HttpMethod, path: String, status: Int, elapsed: FiniteDuration): Unit =
+      each(_.onResponse(method, path, status, elapsed))
+    override def onRetry(attempt: Int, wait: FiniteDuration, failure: TypesafeException): Unit            = each(_.onRetry(attempt, wait, failure))
+    override def onFailure(method: HttpMethod, path: String, failure: Throwable): Unit                    = each(_.onFailure(method, path, failure))
+    override def onEvaluation(model: String, usage: Usage, requestId: Option[RequestId]): Unit            = each(_.onEvaluation(model, usage, requestId))
+  }
 }

@@ -23,7 +23,9 @@ final case class TypesafeConfig(
   headers: List[(String, String)],
   logLevel: LogLevel,
   // #28: tracing and metrics callbacks; not part of the rendering below
-  observer: Observer = Observer.noop
+  observer: Observer = Observer.noop,
+  // #20: where log lines at logLevel and above go; the default writes nothing
+  logger: Logger = Logger.noop
 ) {
 
   /**

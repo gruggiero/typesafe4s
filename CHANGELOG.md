@@ -14,6 +14,8 @@ one of: Added, Changed, Deprecated, Removed, Fixed, Security. At a release, the 
 
 ### Added
 
+- `TYPESAFE_LOG_LEVEL` takes effect: with `config.copy(logger = Logger.system)` the client logs attempts at Debug,
+  retries at Info and failures at Warning, never the API key or a body. The default logger writes nothing (#20).
 - An `Observer` on `TypesafeConfig` receives each attempt, response, retry, failure and evaluation, for tracing
   and metrics. It never sees the API key, and an exception it throws cannot fail a call (#28).
 
