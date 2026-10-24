@@ -70,7 +70,7 @@ final case class RetryPolicy @publicInBinary private (
     }
 
   // spec: retry-policy — Requirement: A wait the service asks for is preferred
-  // to a derived one. Only `RateLimit` can name a delay; the preference flag
+  // to a derived one. `RateLimit` and `Overloaded` can name a delay; the preference flag
   // turns the whole mechanism off. Exhaustive like `isRetryable`: a new
   // family member is a compile error, so a delay carried by one can never be
   // silently dropped.
@@ -82,7 +82,7 @@ final case class RetryPolicy @publicInBinary private (
       case _: TypesafeException.PermissionDenied     => None
       case _: TypesafeException.NotFound             => None
       case _: TypesafeException.UnprocessableEntity  => None
-      case _: TypesafeException.Overloaded           => None
+      case o: TypesafeException.Overloaded           => if (preferServiceDelay) o.retryAfter else None
       case _: TypesafeException.InternalServer       => None
       case _: TypesafeException.ResponseValidation   => None
       case _: TypesafeException.ConnectionFailed     => None

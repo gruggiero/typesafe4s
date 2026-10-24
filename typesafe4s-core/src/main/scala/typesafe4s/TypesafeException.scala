@@ -88,8 +88,14 @@ object TypesafeException {
 
   // spec: error-model — "overload is told apart from other service faults" (529);
   // deliberate superset of the reference SDK's hierarchy — MUST-CONFIRM 529
-  // semantics against the service (task 12.3)
-  final case class Overloaded private[typesafe4s] (override val requestId: Option[RequestId], detail: String) extends TypesafeException {
+  // semantics against the service (task 12.3). retryAfter carries the delay
+  // the service named, read from the same headers as RateLimit's — an
+  // overloaded server says when to come back the same way (RFC 9110 §10.2.3)
+  final case class Overloaded private[typesafe4s] (
+    override val requestId: Option[RequestId],
+    retryAfter: Option[FiniteDuration],
+    detail: String
+  ) extends TypesafeException {
     protected def describe: String = s"the service reported itself overloaded: $detail"
   }
 
@@ -178,7 +184,7 @@ object TypesafeException {
       case 404 => NotFound(requestId, body)
       case 422 => UnprocessableEntity(requestId, body)
       case 429 => RateLimit(requestId, retryAfter(headers), body)
-      case 529 => Overloaded(requestId, body)
+      case 529 => Overloaded(requestId, retryAfter(headers), body)
       // every other refusal is a general service fault carrying what the service reported
       case s   => InternalServer(s, requestId, body)
     }
@@ -189,7 +195,8 @@ object TypesafeException {
 
   // the service names its delay in Retry-After (seconds, standard) or
   // retry-after-ms (millis); a missing, blank or unparseable value means it
-  // named none — header names MUST-CONFIRM per registry (task 12.3)
+  // named none. Retry-After's HTTP-date form is not parsed: it reads as no
+  // named delay, so the derived backoff applies — header names MUST-CONFIRM per registry (task 12.3)
   private def retryAfter(headers: List[(String, String)]): Option[FiniteDuration] = {
     val seconds = header(headers, "Retry-After").flatMap(parseDelay(_, TimeUnit.SECONDS))
     val millis  = header(headers, "retry-after-ms").flatMap(parseDelay(_, TimeUnit.MILLISECONDS))
