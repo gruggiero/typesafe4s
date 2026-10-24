@@ -674,6 +674,7 @@ def moduleDescription(module: String): String = {
     case "core"                       => s"The pure, dependency-free core of typesafe4s, $sdk"
     case "compat-ce"                  => "The Cats Effect binding of kyo-compat, vendored for typesafe4s-client-ce"
     case m if m.startsWith("client-") => s"typesafe4s for ${backends.getOrElse(m.stripPrefix("client-"), m)}: $sdk"
+    case "play-json"                  => "Use play-json JSON values as typesafe4s evaluation state"
     case m if adapters.contains(m)    => s"Use ${adapters(m)} JSON values as typesafe4s evaluation state"
     case _                            => s"typesafe4s, $sdk"
   }
