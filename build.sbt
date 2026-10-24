@@ -2,6 +2,7 @@ import scala.sys.process.Process
 
 import _root_.io.getkyo.compat.CompatBackendAxis
 import sbt.VirtualAxis
+import com.typesafe.tools.mima.core.{DirectMissingMethodProblem, IncompatibleResultTypeProblem, ProblemFilters}
 
 // Cross-compiled on two Scala 3 minors: 3.8.4 is the PUBLISHED build —
 // TASTy is forward-compatible, so a jar compiled on the lower minor is
@@ -740,7 +741,16 @@ lazy val mimaSettings = Def.settings(
   mimaPreviousArtifacts := {
     if (skipNon38Publish.value || moduleName.value.endsWith("-future")) Set.empty
     else Set(organization.value %% moduleName.value % mimaPreviousVersion)
-  }
+  },
+  // Intended breaks for 0.2.0 (early-semver: a 0.x minor may break); delete these when mimaPreviousVersion moves to 0.2.0.
+  mimaBinaryIssueFilters ++= Seq(
+    // #24: Overloaded carries the delay the service names (retryAfter), like RateLimit
+    ProblemFilters.exclude[IncompatibleResultTypeProblem]("typesafe4s.TypesafeException#Overloaded._2"),
+    ProblemFilters.exclude[DirectMissingMethodProblem]("typesafe4s.TypesafeException#Overloaded.apply"),
+    // #23: resolve's allowance is an Option, read from TYPESAFE_TIMEOUT when absent
+    ProblemFilters.exclude[DirectMissingMethodProblem]("typesafe4s.client.TypesafeConfig.resolve"),
+    ProblemFilters.exclude[IncompatibleResultTypeProblem]("typesafe4s.client.TypesafeConfig.resolve$default$5")
+  )
 )
 
 lazy val parallelUnitTests = Def.settings(Test / testForkedParallel := true)
