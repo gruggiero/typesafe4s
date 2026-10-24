@@ -27,7 +27,7 @@ private[typesafe4s] object Ask {
       s"${config.baseUrl}/v1/systemone",
       Some(Json.render(SystemOne.renderRequest(state, config.model, questions))),
       config.apiKey,
-      configured = config.headers
+      configured = UserAgent.withSdk(config.headers)
     )
     Exchange
       .run(transport, config.retryPolicy, clock, config.allowance)(request)
