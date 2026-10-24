@@ -1,5 +1,7 @@
 package typesafe4s.client
 
+import java.net.URI
+
 import scala.concurrent.duration.*
 import scala.util.Try
 
@@ -67,6 +69,13 @@ object TypesafeConfig {
     * `environment` is the injectable seam — production reads `sys.env`, the
     * oracle records the consulted names.
     *
+    * `baseUrl` must be an absolute `https` URL with a host and no query,
+    * fragment or user info; plain `http` is accepted only for a loopback
+    * host (`localhost`, `127.x.x.x`, `[::1]`), for local stubs, so the
+    * credential never travels in plaintext. Trailing slashes are removed,
+    * so `https://api.typesafe.ai/` resolves to `https://api.typesafe.ai`.
+    * Anything else is `InvalidConfiguration(TYPESAFE_BASE_URL, ...)`.
+    *
     * `allowance` bounds each attempt. From the environment it is read from
     * `TYPESAFE_TIMEOUT` in `scala.concurrent.duration.Duration` syntax
     * (`30s`, `1500ms`, `2 minutes`); from either source it must be a finite,
@@ -111,6 +120,9 @@ object TypesafeConfig {
                         InvalidConfiguration(logLevelEnv, s"'${key.redact(raw)}' is not a log level"): TypesafeException
                       )
                 }
+      url    <- validBaseUrl(baseUrl.orElse(environment(baseUrlEnv)).getOrElse(defaultBaseUrl)).left.map { why =>
+                  InvalidConfiguration(baseUrlEnv, key.redact(why)): TypesafeException
+                }
       within <- limit match {
                   case None                                => Right(defaultAllowance)
                   case Some(Right(d)) if d > Duration.Zero => Right(d)
@@ -123,13 +135,38 @@ object TypesafeConfig {
                 }
     } yield TypesafeConfig(
       apiKey = key,
-      baseUrl = baseUrl.orElse(environment(baseUrlEnv)).getOrElse(defaultBaseUrl),
+      baseUrl = url,
       model = model.orElse(environment(modelEnv)).getOrElse(defaultModel),
       allowance = within,
       retryPolicy = retryPolicy,
       headers = headers,
       logLevel = parsed
     )
+  }
+
+  // Right is the URL with its trailing slashes removed; Left says why it
+  // cannot be used (the caller scrubs it — it may echo the raw value)
+  private def validBaseUrl(raw: String): Either[String, String] = {
+    val trimmed = raw.trim
+    Try(new URI(trimmed)).toOption
+      .filter(u => u.isAbsolute && !u.isOpaque && u.getHost != null)
+      .toRight(s"'$raw' is not an absolute URL such as https://api.typesafe.ai")
+      .flatMap { u =>
+        val scheme = u.getScheme.toLowerCase
+        if (u.getRawQuery != null || u.getRawFragment != null) Left(s"'$raw' must not carry a query or a fragment")
+        else if (u.getRawUserInfo != null) Left("the URL must not carry user info; the credential is sent as a header")
+        else if (scheme == "https" || (scheme == "http" && isLoopback(u.getHost))) Right(trimmed.reverse.dropWhile(_ == '/').reverse)
+        else if (scheme == "http") Left(s"'$raw' would send the credential in plaintext; use https (http is allowed only for localhost)")
+        else Left(s"'$raw' is not an http(s) URL")
+      }
+  }
+
+  private def isLoopback(host: String): Boolean = {
+    val h = host.toLowerCase
+    h == "localhost" || h == "[::1]" || h.split('.').toList.match {
+      case "127" :: rest => rest.size == 3 && rest.forall(o => o.nonEmpty && o.forall(_.isDigit) && o.toInt <= 255)
+      case _             => false
+    }
   }
 
   // an environment value is a finite, positive Duration string; anything
