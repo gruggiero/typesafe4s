@@ -6,6 +6,7 @@ import scala.util.Random
 import kyo.compat.*
 
 import typesafe4s.{Attempt, RetryPolicy, TypesafeException}
+import typesafe4s.client.Observer
 
 // ============================================================================
 // spec: retry-policy — Implementation Anchors: "Retry loop — shared runtime
@@ -30,14 +31,14 @@ private[typesafe4s] object Retry {
     * policy. The bound, when configured, is anchored at the moment the call
     * starts — the first attempt counts against it.
     */
-  def run[A](policy: RetryPolicy, clock: Clock)(operation: CIO[A]): CIO[A] =
+  def run[A](policy: RetryPolicy, clock: Clock, observer: Observer = Observer.noop)(operation: CIO[A]): CIO[A] =
     for {
       // the call's own clock — read once, only when a bound is configured
       started <- policy.totalBound match {
                    case Some(_) => clock.monotonic.map(Some(_))
                    case None    => CIO.value(None)
                  }
-      result  <- loop(policy, clock, operation, started, Attempt.first)
+      result  <- loop(policy, clock, observer, operation, started, Attempt.first)
     } yield result
 
   /**
@@ -49,6 +50,7 @@ private[typesafe4s] object Retry {
   private def loop[A](
     policy: RetryPolicy,
     clock: Clock,
+    observer: Observer,
     operation: CIO[A],
     started: Option[FiniteDuration],
     attempt: Attempt
@@ -56,7 +58,7 @@ private[typesafe4s] object Retry {
     operation.recover { failure =>
       failure match {
         case e: TypesafeException if policy.isRetryable(e) && attempt.ordinal < policy.attempts =>
-          retryAfter(policy, clock, operation, started, attempt, e)
+          retryAfter(policy, clock, observer, operation, started, attempt, e)
         case _                                                                                  =>
           CIO.fail(failure)
       }
@@ -71,6 +73,7 @@ private[typesafe4s] object Retry {
   private def retryAfter[A](
     policy: RetryPolicy,
     clock: Clock,
+    observer: Observer,
     operation: CIO[A],
     started: Option[FiniteDuration],
     attempt: Attempt,
@@ -89,7 +92,10 @@ private[typesafe4s] object Retry {
                       CIO.value(true)
                   }
       result   <-
-        if (mayBegin) clock.sleep(wait).flatMap(_ => loop(policy, clock, operation, started, attempt.next))
+        if (mayBegin)
+          Observe(observer.onRetry(attempt.ordinal + 1, wait, failure))
+            .flatMap(_ => clock.sleep(wait))
+            .flatMap(_ => loop(policy, clock, observer, operation, started, attempt.next))
         else CIO.fail(failure)
     } yield result
 }

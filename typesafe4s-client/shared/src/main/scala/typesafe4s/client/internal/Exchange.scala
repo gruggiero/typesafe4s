@@ -6,7 +6,7 @@ import kyo.compat.*
 
 import typesafe4s.{HttpRequest, HttpResponse, RequestId, RetryPolicy, TypesafeException}
 import typesafe4s.TypesafeException.{InternalServer, Timeout}
-import typesafe4s.client.Transport
+import typesafe4s.client.{Observer, Transport}
 
 // ============================================================================
 // spec: http-transport — the call pipeline: per-attempt allowance inside
@@ -34,9 +34,21 @@ private[typesafe4s] object Exchange {
     transport: Transport,
     policy: RetryPolicy,
     clock: Clock,
-    allowance: FiniteDuration
-  )(request: HttpRequest): CIO[HttpResponse] =
-    Retry.run(policy, clock)(attempt(transport, clock, allowance)(request))
+    allowance: FiniteDuration,
+    observer: Observer = Observer.noop
+  )(request: HttpRequest): CIO[HttpResponse] = {
+    val path = Observe.path(request.target)
+    CAtomicInt
+      .init(0)
+      .flatMap { attempts =>
+        Retry.run(policy, clock, observer)(
+          attempts.incrementAndGet
+            .flatMap(n => Observe(observer.onAttempt(request.method, path, n)))
+            .flatMap(_ => attempt(transport, clock, allowance, observer, path)(request))
+        )
+      }
+      .recover(failure => Observe(observer.onFailure(request.method, path, failure)).flatMap(_ => CIO.fail(failure)))
+  }
 
   /**
     * One attempt: the exchange raced against `clock.sleep(allowance)` —
@@ -51,7 +63,9 @@ private[typesafe4s] object Exchange {
   private def attempt(
     transport: Transport,
     clock: Clock,
-    allowance: FiniteDuration
+    allowance: FiniteDuration,
+    observer: Observer,
+    path: String
   )(request: HttpRequest): CIO[HttpResponse] =
     // `CIO.race` diverges across bindings on a losing FAILURE: the zio
     // binding's race joins the surviving branch (first SUCCESS wins),
@@ -70,7 +84,15 @@ private[typesafe4s] object Exchange {
     CIO.defer(()).flatMap { _ =>
       CIO
         .race(
-          transport.exchange(request).flatMap(r => accept(request, r)).liftToTry.map(Some(_)),
+          clock.monotonic
+            .flatMap { sent =>
+              transport.exchange(request).flatMap { r =>
+                clock.monotonic.flatMap(now => Observe(observer.onResponse(request.method, path, r.status, now - sent))).map(_ => r)
+              }
+            }
+            .flatMap(r => accept(request, r))
+            .liftToTry
+            .map(Some(_)),
           clock.sleep(allowance).map(_ => None)
         )
         .flatMap {
