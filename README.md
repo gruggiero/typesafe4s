@@ -44,6 +44,10 @@ Optional JSON adapters — each pulls in exactly its own library and nothing els
 "io.github.gruggiero" %% "typesafe4s-upickle"  % "0.1.0"  // uPickle
 ```
 
+From the next release, `typesafe4s-play-json` adds the same adapter for
+[play-json](https://github.com/playframework/play-json), for Play Framework applications
+(`import typesafe4s.playjson.JsonEntry`).
+
 ## Supported backends
 
 All five rows ship at 0.1 — **ZIO, Cats Effect, Ox, Kyo and Pekko**. A sixth `future` row exists as
@@ -197,7 +201,7 @@ Formats; `sbt check` verifies formatting without writing.
 | `typesafe4s-core` | `typesafe4s-core` | Pure, sans-IO. **Zero runtime dependencies** — a contract, not a preference. |
 | `typesafe4s-compat-ce` | `typesafe4s-compat-ce` | Vendored `kyo.compat` Cats Effect binding (removed upstream at RC6). |
 | `typesafe4s-client` | `typesafe4s-client-{zio,ce,ox,kyo,pekko}` | One source tree, cross-compiled per backend. The `future` row is compile-only and never published. |
-| `typesafe4s-json-*` | `typesafe4s-{circe,zio-json,jsoniter,upickle}` | JSON adapters — each carries exactly its own library. |
+| `typesafe4s-json-*` | `typesafe4s-{circe,zio-json,jsoniter,upickle,play-json}` | JSON adapters — each carries exactly its own library. |
 | `integration-tests` | — | One parity suite, recompiled and run on every row. |
 | `examples` | — | Per-row runnable examples; compiled in CI so they cannot rot. |
 
