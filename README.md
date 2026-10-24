@@ -10,6 +10,9 @@ send state and typed questions, get typed answers with calibrated probabilities.
 > **Not affiliated with Typesafe Inc. (now Lightbend).** "TypeSafe" here means the AI platform at
 > [typesafe.ai](https://docs.typesafe.ai), not the company behind Akka, Play, or `typesafe-config`.
 
+typesafe4s is part of the [LLM4S Foundation](https://llm4s.org/foundation/). See
+[Maintainers](#maintainers) and [Community](#community) to meet the team.
+
 ## Why it exists
 
 The SDK works with **your** effect system — ZIO, Cats Effect, Ox, Kyo, or Pekko — with no
@@ -80,6 +83,20 @@ sbt "examplesCe3_8_4/runMain typesafe4s.examples.ConfidenceRouting"   # confiden
 # (each row also has a `3_9_0` cell — see "Scala versions" below)
 ```
 
+### Large question sets
+
+`systemOneBatched` splits a question set too large for one exchange into batches and streams one
+`Evaluation` per batch. To get the evaluation of the whole set, collect the stream and merge it with
+`Evaluation.combine`, which unions the answers (a name answered twice is an error), sums the usage and
+keeps the model (ZIO shown; every row's stream collects the same way):
+
+```scala
+for {
+  evals <- client.systemOneBatched(state)(questions).runCollect
+  whole <- ZIO.fromEither(Evaluation.combine(evals))
+} yield whole.answers
+```
+
 ## Live tests
 
 The parity suite includes credential-gated live tests: with `TYPESAFE_API_KEY` set they perform a
@@ -92,6 +109,7 @@ TYPESAFE_API_KEY=… sbt parityAll
 
 ## Documentation
 
+- [Changelog](CHANGELOG.md) — what changed in each release
 - [Architecture analysis](docs/architecture-analysis.md) — design rationale and trade-offs
 - [Project context](openspec/project.md) — module graph, stack, conventions
 - [Implementation change](openspec/changes/add-typesafe4s-sdk/) — proposal, design, specs, tasks
@@ -145,6 +163,56 @@ Formats; `sbt check` verifies formatting without writing.
 | `typesafe4s-json-*` | `typesafe4s-{circe,zio-json,jsoniter,upickle}` | JSON adapters — each carries exactly its own library. |
 | `integration-tests` | — | One parity suite, recompiled and run on every row. |
 | `examples` | — | Per-row runnable examples; compiled in CI so they cannot rot. |
+
+## Maintainers
+
+- **Kannupriya Kalra** (maintainer) - [@kannupriyakalra](https://github.com/kannupriyakalra) ·
+  [LinkedIn](https://www.linkedin.com/in/kannupriyakalra/) · [kannupriya@llm4s.org](mailto:kannupriya@llm4s.org)
+- **Giovanni Ruggiero** (original creator) - [@gruggiero](https://github.com/gruggiero)
+
+## Community
+
+typesafe4s is a project of the **[LLM4S Foundation](https://llm4s.org/foundation/)**, a global Scala and AI
+community that helps developers learn AI engineering by contributing to real open-source projects such as
+[LLM4S](https://github.com/llm4s/llm4s), the AI framework for Scala, and typesafe4s.
+
+### Contribute and grow: global internship opportunities
+
+Contributing to typesafe4s is a practical way into AI engineering, and through the
+[LLM4S Foundation](https://llm4s.org/foundation/) it can open doors to global internship opportunities:
+
+- **Build a public track record.** Every merged pull request is real, reviewed AI engineering work in Scala that you
+  can point to in applications and interviews.
+- **Learn from mentors.** Maintainers review your changes and help you grow, and you can meet them and experienced
+  Scala developers at the weekly Dev Hours.
+- **Get noticed for internships.** The foundation connects active contributors with global internship and career
+  pathways, and mentors programmes such as [Google Summer of Code](https://llm4s.org/gsoc/). Consistent, high-quality
+  contributions are the best way to be considered.
+- **Grow from first issue to bigger work.** Start with an [open issue](https://github.com/gruggiero/typesafe4s/issues),
+  then take on bigger work here and in the main [LLM4S](https://github.com/llm4s/llm4s) repository.
+
+### Meet the maintainers and community
+
+We meet every **Sunday at 9:00 AM London time** for Dev Hours.
+
+- **Dev Hours calendar:** [luma.com/calendar/cal-Zd9BLb5jbZewxLA](https://luma.com/calendar/cal-Zd9BLb5jbZewxLA). Join the event for the date you want to attend.
+- **Add every Dev Hour to your calendar:** open the
+  [LLM4S Dev Hour weekly calendar link](https://api2.luma.com/ics/get?entity=calendar&id=cal-Zd9BLb5jbZewxLA). It adds
+  all the events for 2026 to your Google Calendar, so you don't miss a Dev Hour.
+
+### Links
+
+- **Global AI Discord community** (~400 members): [discord.com/invite/DjPMufnhG6](https://discord.com/invite/DjPMufnhG6).
+  Please feel free to invite anyone who may benefit from joining our community.
+- **Website and documentation:** [llm4s.org](https://llm4s.org/)
+- **GitHub organization:** [github.com/llm4s](https://github.com/llm4s)
+- **Main repository:** [github.com/llm4s/llm4s](https://github.com/llm4s/llm4s)
+
+### Support the project
+
+- **Open Collective:** [opencollective.com/llm4s](https://opencollective.com/llm4s). If you find LLM4S useful, even a
+  $1 donation would really help support the project.
+- If your company is looking for an AI framework, please help us connect.
 
 ## License
 
